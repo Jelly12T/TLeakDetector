@@ -3,6 +3,9 @@
 Tool phát hiện memory leak của UIViewController trên iOS, **chỉ chạy ở Debug**.
 Bản Release vẫn build module nhưng module rỗng, không có symbol nào của tool.
 
+> **Trạng thái:** mới có nền móng: package an toàn cho Release, app LeakZoo để chấm tool, và spike cho phần graph.
+> `TLeakDetector.install()` chưa phát hiện leak nào. Logic phát hiện sẽ được thêm ở các sprint sau.
+
 ## Cài đặt
 
 Thêm Swift Package này vào app, chọn product **TLeakDetector** (một dependency duy nhất).
@@ -23,7 +26,20 @@ func application(_ application: UIApplication,
 
 Yêu cầu: iOS 15+, Xcode 16+ (Swift tools 6.0).
 
-## Cấu trúc
+## Cấu trúc repo
+
+```
+├── Package.swift                 package chính, product "TLeakDetector"
+├── Sources/
+│   ├── LeakCore/                 quyết định có leak hay không, không import UIKit
+│   └── LeakUIKit/                hook vào UIViewController, API public TLeakDetector
+├── Tests/LeakCoreTests/
+├── scripts/check-release-symbols.sh   kiểm tra tool không lọt vào Release
+├── Examples/HostApp/             app tối giản để script trên archive
+├── LeakZoo/                      app 16 scenario leak / không leak, kèm expected.json
+├── Spikes/                       thí nghiệm có timebox, không phải code production
+└── docs/adr/                     các quyết định kiến trúc
+```
 
 | Target | Vai trò |
 |---|---|
@@ -47,7 +63,7 @@ scripts/check-release-symbols.sh --configuration Debug --expect-present   # ki�
 Script archive app, chạy `nm` và `strings` trên mọi Mach-O trong `.app`, fail nếu thấy tên module,
 tên product, flag hoặc tên type khai báo trong `Sources/`. Chi tiết: [ADR 001](docs/adr/001-exclude-from-release.md).
 
-## Configuration khác Debug/Release
+### Configuration khác Debug/Release
 
 Xcode chọn debug hay release cho package **theo tên configuration**, không theo build settings của app.
 Đã kiểm tra trên Xcode 26.2:
@@ -62,13 +78,67 @@ Xcode chọn debug hay release cho package **theo tên configuration**, không t
 Nếu project có configuration riêng, chạy script với `--configuration <tên>` cho từng cái
 (thêm `--expect-present` cho những cái cần có tool).
 
+## LeakZoo: bài kiểm tra cho tool
+
+[LeakZoo/](LeakZoo/) là app UIKit cố ý chứa 16 scenario **đã biết đáp án**. Mỗi sprint dùng nó để chấm tool:
+10 case leak phải được báo, và 6 case không leak không được báo.
+
+| Nhóm | Case | Ví dụ |
+|---|---|---|
+| Leak, cycle | Z01–Z06 | closure bắt `self`, delegate strong, `UIAction`, child VC, popToRoot, Combine `sink` |
+| Leak, rooted | Z07–Z10 | Timer không invalidate, observer không remove, Task trên AsyncStream không finish, biến static |
+| Không leak | Z11–Z16 | `[weak self]`, Task bị cancel, Timer được invalidate, `asyncAfter` (deinit trễ khoảng 1 giây), child và popToRoot đúng cách |
+
+Có đủ 4 cách vào/ra màn hình: push/pop, present/dismiss, popToRoot, add/remove child.
+
+- **[expected.json](LeakZoo/expected.json)** là nơi duy nhất ghi đáp án. App đọc file này để hiện danh sách, và UI test ở S8 sẽ đọc lại.
+  Mỗi case có `expectation`, `navigation`, `retainPath` (ai đang giữ object) và danh sách object kèm cờ `leaks`.
+  Nếu id trong JSON không có VC tương ứng thì app crash ngay lúc mở.
+- Mỗi VC in `[LeakZoo] t=<uptime> deinit <id>` khi bị giải phóng.
+- Mở app với launch argument `--autorun` thì app tự mở rồi đóng lần lượt 16 case và ghi log `open` / `close` / `deinit`.
+
+```sh
+open LeakZoo/LeakZoo.xcodeproj        # scheme LeakZoo, chạy trên simulator
+```
+
+### Soi bộ nhớ (Memory Graph, `leaks`, `heap`)
+
+Kiểm tra trên máy dev ngày 2026-11-05:
+
+- **Phải dùng Xcode 27.1** (`~/Desktop/xcode/Xcode.app`) với simulator **iOS 27.1**.
+  Xcode 26.2 không đọc được bộ nhớ của simulator mới hơn nó (lỗi `Failed to get DYLD info`).
+- Máy cần bật quyền debug một lần: `sudo DevToolsSecurity -enable`.
+- Khi chạy `leaks`/`heap` từ terminal, app cần có entitlement `com.apple.security.get-task-allow`. Xcode tự thêm khi bấm Run.
+- Các case cycle **không có dấu "!"** trong Memory Graph. UIKit tự đăng ký mọi VC vào NotificationCenter,
+  nên công cụ của Apple coi là vẫn có đường từ root. Hãy dựa vào log deinit và danh sách object còn sống.
+
+## Spikes
+
+[Spikes/](Spikes/) chứa các thí nghiệm có timebox. Mỗi spike trả lời một câu hỏi kỹ thuật trước khi làm tính năng thật.
+Mỗi spike là một package riêng, **không** được link vào TLeakDetector. Có thể xoá mà không ảnh hưởng tool.
+
+| Spike | Câu hỏi | Kết quả |
+|---|---|---|
+| [FieldOwnership](Spikes/FieldOwnership/) | Đọc được property nào là weak/unowned từ metadata Swift không? | **GO.** Xem [ADR 002](docs/adr/002-swift-field-ownership.md) |
+
+```sh
+cd Spikes/FieldOwnership
+swift test                                                          # macOS
+scripts/run.sh sim-all 'platform=iOS Simulator,name=iPhone 17'      # simulator → results/sim-all.txt
+scripts/run-device.sh device-all <udid> <team-id>                   # iPhone thật, qua app SpikeHost
+```
+
 ## Phát triển
 
 ```sh
-swift build && swift test                      # macOS, chỉ LeakCore có nội dung
-open Examples/HostApp/HostApp.xcodeproj        # host app iOS để chạy thử
+swift build && swift test                      # package chính trên macOS (chỉ LeakCore có nội dung)
+scripts/check-release-symbols.sh               # Release sạch
+open LeakZoo/LeakZoo.xcodeproj                 # app chấm tool
 ```
 
 ## Tài liệu
 
-- [docs/adr/](docs/adr/): các quyết định kiến trúc
+| ADR | Nội dung |
+|---|---|
+| [001](docs/adr/001-exclude-from-release.md) | Loại tool khỏi bản Release: flag trong package, `#if DEBUG` trong app, script kiểm tra binary |
+| [002](docs/adr/002-swift-field-ownership.md) | Đọc ownership của field Swift từ reflection metadata, và cách fallback khi app tắt reflection |
