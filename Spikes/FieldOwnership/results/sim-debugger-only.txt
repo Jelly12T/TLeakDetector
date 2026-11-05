@@ -1,0 +1,67 @@
+# label: sim-debugger-only
+# destination: platform=iOS Simulator,id=34BADC78-19CC-4D67-8F4D-D668D91C02F9
+# settings: OTHER_SWIFT_FLAGS=$(inherited) -Xfrontend -reflection-metadata-for-debugger-only
+# xcode: Xcode 26.2
+SPIKE|ENV|simulator|iOS 26.3.1 iPhone|arm64
+SPIKE|TYPE|PureSwiftClass|path=class PureSwiftClass|failure=Fields pointer is null (reflection metadata not emitted)|fields=0/11|mirrorLabels=0|runtimeFields=0
+SPIKE|FIELD|PureSwiftClass|0|-|<unread>|<none>|-|plain|<unread>|runtime=n/a|expected=strongRef:strong|FAIL
+SPIKE|FIELD|PureSwiftClass|1|-|<unread>|<none>|-|plain|<unread>|runtime=n/a|expected=weakRef:weak|FAIL
+SPIKE|FIELD|PureSwiftClass|2|-|<unread>|<none>|-|plain|<unread>|runtime=n/a|expected=unownedRef:unowned|FAIL
+SPIKE|FIELD|PureSwiftClass|3|-|<unread>|<none>|-|plain|<unread>|runtime=n/a|expected=unsafeRef:unowned(unsafe)|FAIL
+SPIKE|FIELD|PureSwiftClass|4|-|<unread>|<none>|-|plain|<unread>|runtime=n/a|expected=weakExternal:weak|FAIL
+SPIKE|FIELD|PureSwiftClass|5|-|<unread>|<none>|-|plain|<unread>|runtime=n/a|expected=unownedExternal:unowned|FAIL
+SPIKE|FIELD|PureSwiftClass|6|-|<unread>|<none>|-|plain|<unread>|runtime=n/a|expected=weakObjC:weak|FAIL
+SPIKE|FIELD|PureSwiftClass|7|-|<unread>|<none>|-|plain|<unread>|runtime=n/a|expected=weakSwiftDelegate:weak|FAIL
+SPIKE|FIELD|PureSwiftClass|8|-|<unread>|<none>|-|plain|<unread>|runtime=n/a|expected=weakObjCDelegate:weak|FAIL
+SPIKE|FIELD|PureSwiftClass|9|-|<unread>|<none>|-|plain|<unread>|runtime=n/a|expected=weakAnyObject:weak|FAIL
+SPIKE|FIELD|PureSwiftClass|10|-|<unread>|<none>|-|plain|<unread>|runtime=n/a|expected=strongLet:strong|FAIL
+SPIKE|OBJC|PureSwiftClass|ivars=11|strongRef,weakRef,unownedRef,unsafeRef,weakExternal,unownedExternal,weakObjC,weakSwiftDelegate,weakObjCDelegate,weakAnyObject,strongLet|weakIvarLayout=nil|strongIvarLayout=nil
+SPIKE|TYPE|SwiftSubclass|path=class SwiftSubclass|failure=Fields pointer is null (reflection metadata not emitted)|fields=0/5|mirrorLabels=0|runtimeFields=0
+SPIKE|FIELD|SwiftSubclass|0|-|<unread>|<none>|-|plain|<unread>|runtime=n/a|expected=strongChild:strong|FAIL
+SPIKE|FIELD|SwiftSubclass|1|-|<unread>|<none>|-|plain|<unread>|runtime=n/a|expected=weakChild:weak|FAIL
+SPIKE|FIELD|SwiftSubclass|2|-|<unread>|<none>|-|plain|<unread>|runtime=n/a|expected=unownedChild:unowned|FAIL
+SPIKE|FIELD|SwiftSubclass|3|-|<unread>|<none>|-|plain|<unread>|runtime=n/a|expected=strongBase:strong|FAIL
+SPIKE|FIELD|SwiftSubclass|4|-|<unread>|<none>|-|plain|<unread>|runtime=n/a|expected=weakBase:weak|FAIL
+SPIKE|OBJC|SwiftSubclass|ivars=3|strongChild,weakChild,unownedChild|weakIvarLayout=nil|strongIvarLayout=nil
+SPIKE|TYPE|NSObjectSubclass|path=class NSObjectSubclass|failure=Fields pointer is null (reflection metadata not emitted)|fields=0/4|mirrorLabels=0|runtimeFields=0
+SPIKE|FIELD|NSObjectSubclass|0|-|<unread>|<none>|-|plain|<unread>|runtime=n/a|expected=strongRef:strong|FAIL
+SPIKE|FIELD|NSObjectSubclass|1|-|<unread>|<none>|-|plain|<unread>|runtime=n/a|expected=weakRef:weak|FAIL
+SPIKE|FIELD|NSObjectSubclass|2|-|<unread>|<none>|-|plain|<unread>|runtime=n/a|expected=unownedRef:unowned|FAIL
+SPIKE|FIELD|NSObjectSubclass|3|-|<unread>|<none>|-|plain|<unread>|runtime=n/a|expected=weakObjCProperty:weak|FAIL
+SPIKE|OBJC|NSObjectSubclass|ivars=4|strongRef,weakRef,unownedRef,weakObjCProperty|weakIvarLayout=nil|strongIvarLayout=nil
+SPIKE|TYPE|ViewControllerSubclass|path=class ViewControllerSubclass|failure=Fields pointer is null (reflection metadata not emitted)|fields=0/4|mirrorLabels=0|runtimeFields=0
+SPIKE|FIELD|ViewControllerSubclass|0|-|<unread>|<none>|-|plain|<unread>|runtime=n/a|expected=strongRef:strong|FAIL
+SPIKE|FIELD|ViewControllerSubclass|1|-|<unread>|<none>|-|plain|<unread>|runtime=n/a|expected=weakView:weak|FAIL
+SPIKE|FIELD|ViewControllerSubclass|2|-|<unread>|<none>|-|plain|<unread>|runtime=n/a|expected=weakDelegate:weak|FAIL
+SPIKE|FIELD|ViewControllerSubclass|3|-|<unread>|<none>|-|plain|<unread>|runtime=n/a|expected=unownedRef:unowned|FAIL
+SPIKE|OBJC|ViewControllerSubclass|ivars=4|strongRef,weakView,weakDelegate,unownedRef|weakIvarLayout=nil|strongIvarLayout=nil
+SPIKE|TYPE|PlainStruct|path=value type → descriptor PlainStruct|failure=Fields pointer is null (reflection metadata not emitted)|fields=0/3|mirrorLabels=0|runtimeFields=0
+SPIKE|FIELD|PlainStruct|0|-|<unread>|<none>|-|plain|<unread>|runtime=n/a|expected=strongRef:strong|FAIL
+SPIKE|FIELD|PlainStruct|1|-|<unread>|<none>|-|plain|<unread>|runtime=n/a|expected=weakRef:weak|FAIL
+SPIKE|FIELD|PlainStruct|2|-|<unread>|<none>|-|plain|<unread>|runtime=n/a|expected=unownedRef:unowned|FAIL
+SPIKE|TYPE|GenericClass<Target>|path=class GenericClass|failure=Fields pointer is null (reflection metadata not emitted)|fields=0/4|mirrorLabels=0|runtimeFields=0
+SPIKE|FIELD|GenericClass<Target>|0|-|<unread>|<none>|-|plain|<unread>|runtime=n/a|expected=strongRef:strong|FAIL
+SPIKE|FIELD|GenericClass<Target>|1|-|<unread>|<none>|-|plain|<unread>|runtime=n/a|expected=weakRef:weak|FAIL
+SPIKE|FIELD|GenericClass<Target>|2|-|<unread>|<none>|-|plain|<unread>|runtime=n/a|expected=unownedRef:unowned|FAIL
+SPIKE|FIELD|GenericClass<Target>|3|-|<unread>|<none>|-|plain|<unread>|runtime=n/a|expected=strongArray:strong|FAIL
+SPIKE|OBJC|GenericClass<Target>|ivars=4|strongRef,weakRef,unownedRef,strongArray|weakIvarLayout=nil|strongIvarLayout=nil
+SPIKE|TYPE|GenericStruct<ExternalTarget,Int>|path=value type → descriptor GenericStruct|failure=Fields pointer is null (reflection metadata not emitted)|fields=0/4|mirrorLabels=0|runtimeFields=0
+SPIKE|FIELD|GenericStruct<ExternalTarget,Int>|0|-|<unread>|<none>|-|plain|<unread>|runtime=n/a|expected=strongRef:strong|FAIL
+SPIKE|FIELD|GenericStruct<ExternalTarget,Int>|1|-|<unread>|<none>|-|plain|<unread>|runtime=n/a|expected=weakRef:weak|FAIL
+SPIKE|FIELD|GenericStruct<ExternalTarget,Int>|2|-|<unread>|<none>|-|plain|<unread>|runtime=n/a|expected=unownedRef:unowned|FAIL
+SPIKE|FIELD|GenericStruct<ExternalTarget,Int>|3|-|<unread>|<none>|-|plain|<unread>|runtime=n/a|expected=payload:strong|FAIL
+SPIKE|TYPE|GenericSubclass<Target>|path=class GenericSubclass|failure=Fields pointer is null (reflection metadata not emitted)|fields=0/3|mirrorLabels=0|runtimeFields=0
+SPIKE|FIELD|GenericSubclass<Target>|0|-|<unread>|<none>|-|plain|<unread>|runtime=n/a|expected=unownedChild:unowned|FAIL
+SPIKE|FIELD|GenericSubclass<Target>|1|-|<unread>|<none>|-|plain|<unread>|runtime=n/a|expected=strongChild:strong|FAIL
+SPIKE|FIELD|GenericSubclass<Target>|2|-|<unread>|<none>|-|plain|<unread>|runtime=n/a|expected=weakBase:weak|FAIL
+SPIKE|OBJC|GenericSubclass<Target>|ivars=2|unownedChild,strongChild|weakIvarLayout=nil|strongIvarLayout=nil
+SPIKE|TYPE|LazyAndWrappers|path=class LazyAndWrappers|failure=Fields pointer is null (reflection metadata not emitted)|fields=0/5|mirrorLabels=0|runtimeFields=0
+SPIKE|FIELD|LazyAndWrappers|0|-|<unread>|<none>|-|plain|<unread>|runtime=n/a|expected=$__lazy_storage_$_lazyStrong:strong|FAIL
+SPIKE|FIELD|LazyAndWrappers|1|-|<unread>|<none>|-|plain|<unread>|runtime=n/a|expected=$__lazy_storage_$_lazyOptional:strong|FAIL
+SPIKE|FIELD|LazyAndWrappers|2|-|<unread>|<none>|-|plain|<unread>|runtime=n/a|expected=_wrappedWeak:strong|FAIL
+SPIKE|FIELD|LazyAndWrappers|3|-|<unread>|<none>|-|plain|<unread>|runtime=n/a|expected=_boxedStrong:strong|FAIL
+SPIKE|FIELD|LazyAndWrappers|4|-|<unread>|<none>|-|plain|<unread>|runtime=n/a|expected=plainWeak:weak|FAIL
+SPIKE|OBJC|LazyAndWrappers|ivars=5|$__lazy_storage_$_lazyStrong,$__lazy_storage_$_lazyOptional,_wrappedWeak,_boxedStrong,plainWeak|weakIvarLayout=nil|strongIvarLayout=nil
+SPIKE|SUMMARY|Q1|0/9
+SPIKE|SUMMARY|Q2|0/43
+SPIKE|SUMMARY|Q3|0/43

@@ -1,0 +1,68 @@
+# label: device-all
+# destination: device 00008101-0006299E0AB9003A
+# settings: <default: all reflection metadata>
+# xcode: Xcode 26.2
+SPIKE|ENV|device|iOS 26.6 iPhone|arm64
+SPIKE|TYPE|PureSwiftClass|path=class PureSwiftClass → stop: ObjC class _TtCs12_SwiftObject|failure=-|fields=11/11|mirrorLabels=11|runtimeFields=11
+SPIKE|FIELD|PureSwiftClass|0|PureSwiftClass|strongRef|strongRef|{direct}|sym|strong|runtime=strong|expected=strongRef:strong|OK
+SPIKE|FIELD|PureSwiftClass|1|PureSwiftClass|weakRef|weakRef|{direct}SgXw|sym|weak|runtime=notStrong|expected=weakRef:weak|OK
+SPIKE|FIELD|PureSwiftClass|2|PureSwiftClass|unownedRef|unownedRef|{direct}Xo|sym|unowned|runtime=notStrong|expected=unownedRef:unowned|OK
+SPIKE|FIELD|PureSwiftClass|3|PureSwiftClass|unsafeRef|unsafeRef|{direct}Xu|sym|unowned(unsafe)|runtime=notStrong|expected=unsafeRef:unowned(unsafe)|OK
+SPIKE|FIELD|PureSwiftClass|4|PureSwiftClass|weakExternal|weakExternal|{indirect}SgXw|sym|weak|runtime=notStrong|expected=weakExternal:weak|OK
+SPIKE|FIELD|PureSwiftClass|5|PureSwiftClass|unownedExternal|unownedExternal|{indirect}Xo|sym|unowned|runtime=notStrong|expected=unownedExternal:unowned|OK
+SPIKE|FIELD|PureSwiftClass|6|PureSwiftClass|weakObjC|weakObjC|So8NSObjectCSgXw|plain|weak|runtime=notStrong|expected=weakObjC:weak|OK
+SPIKE|FIELD|PureSwiftClass|7|PureSwiftClass|weakSwiftDelegate|weakSwiftDelegate|{direct}_pSgXw|sym|weak|runtime=notStrong|expected=weakSwiftDelegate:weak|OK
+SPIKE|FIELD|PureSwiftClass|8|PureSwiftClass|weakObjCDelegate|weakObjCDelegate|12SpikeSamples12ObjCDelegate_pSgXw|plain|weak|runtime=notStrong|expected=weakObjCDelegate:weak|OK
+SPIKE|FIELD|PureSwiftClass|9|PureSwiftClass|weakAnyObject|weakAnyObject|yXlSgXw|plain|weak|runtime=notStrong|expected=weakAnyObject:weak|OK
+SPIKE|FIELD|PureSwiftClass|10|PureSwiftClass|strongLet|strongLet|{indirect}|sym|strong|runtime=strong|expected=strongLet:strong|OK
+SPIKE|OBJC|PureSwiftClass|ivars=11|strongRef,weakRef,unownedRef,unsafeRef,weakExternal,unownedExternal,weakObjC,weakSwiftDelegate,weakObjCDelegate,weakAnyObject,strongLet|weakIvarLayout=nil|strongIvarLayout=nil
+SPIKE|TYPE|SwiftSubclass|path=class SwiftSubclass → class SwiftBase → stop: ObjC class _TtCs12_SwiftObject|failure=-|fields=5/5|mirrorLabels=5|runtimeFields=5
+SPIKE|FIELD|SwiftSubclass|0|SwiftSubclass|strongChild|strongChild|{direct}|sym|strong|runtime=strong|expected=strongChild:strong|OK
+SPIKE|FIELD|SwiftSubclass|1|SwiftSubclass|weakChild|weakChild|{direct}SgXw|sym|weak|runtime=notStrong|expected=weakChild:weak|OK
+SPIKE|FIELD|SwiftSubclass|2|SwiftSubclass|unownedChild|unownedChild|{direct}Xo|sym|unowned|runtime=notStrong|expected=unownedChild:unowned|OK
+SPIKE|FIELD|SwiftSubclass|3|SwiftBase|strongBase|strongBase|{direct}|sym|strong|runtime=strong|expected=strongBase:strong|OK
+SPIKE|FIELD|SwiftSubclass|4|SwiftBase|weakBase|weakBase|{direct}SgXw|sym|weak|runtime=notStrong|expected=weakBase:weak|OK
+SPIKE|OBJC|SwiftSubclass|ivars=3|strongChild,weakChild,unownedChild|weakIvarLayout=nil|strongIvarLayout=nil
+SPIKE|TYPE|NSObjectSubclass|path=class NSObjectSubclass → stop: ObjC class NSObject|failure=-|fields=4/4|mirrorLabels=4|runtimeFields=4
+SPIKE|FIELD|NSObjectSubclass|0|NSObjectSubclass|strongRef|strongRef|{direct}|sym|strong|runtime=strong|expected=strongRef:strong|OK
+SPIKE|FIELD|NSObjectSubclass|1|NSObjectSubclass|weakRef|weakRef|{direct}SgXw|sym|weak|runtime=notStrong|expected=weakRef:weak|OK
+SPIKE|FIELD|NSObjectSubclass|2|NSObjectSubclass|unownedRef|unownedRef|{direct}Xo|sym|unowned|runtime=notStrong|expected=unownedRef:unowned|OK
+SPIKE|FIELD|NSObjectSubclass|3|NSObjectSubclass|weakObjCProperty|weakObjCProperty|So8NSObjectCSgXw|plain|weak|runtime=notStrong|expected=weakObjCProperty:weak|OK
+SPIKE|OBJC|NSObjectSubclass|ivars=4|strongRef,weakRef,unownedRef,weakObjCProperty|weakIvarLayout=nil|strongIvarLayout=nil
+SPIKE|TYPE|ViewControllerSubclass|path=class ViewControllerSubclass → stop: ObjC class UIViewController|failure=-|fields=4/4|mirrorLabels=4|runtimeFields=4
+SPIKE|FIELD|ViewControllerSubclass|0|ViewControllerSubclass|strongRef|strongRef|{direct}|sym|strong|runtime=strong|expected=strongRef:strong|OK
+SPIKE|FIELD|ViewControllerSubclass|1|ViewControllerSubclass|weakView|weakView|So6UIViewCSgXw|plain|weak|runtime=notStrong|expected=weakView:weak|OK
+SPIKE|FIELD|ViewControllerSubclass|2|ViewControllerSubclass|weakDelegate|weakDelegate|{direct}_pSgXw|sym|weak|runtime=notStrong|expected=weakDelegate:weak|OK
+SPIKE|FIELD|ViewControllerSubclass|3|ViewControllerSubclass|unownedRef|unownedRef|{direct}Xo|sym|unowned|runtime=notStrong|expected=unownedRef:unowned|OK
+SPIKE|OBJC|ViewControllerSubclass|ivars=4|strongRef,weakView,weakDelegate,unownedRef|weakIvarLayout=nil|strongIvarLayout=nil
+SPIKE|TYPE|PlainStruct|path=value type → descriptor PlainStruct|failure=-|fields=3/3|mirrorLabels=3|runtimeFields=3
+SPIKE|FIELD|PlainStruct|0|PlainStruct|strongRef|strongRef|{direct}|sym|strong|runtime=strong|expected=strongRef:strong|OK
+SPIKE|FIELD|PlainStruct|1|PlainStruct|weakRef|weakRef|{direct}SgXw|sym|weak|runtime=notStrong|expected=weakRef:weak|OK
+SPIKE|FIELD|PlainStruct|2|PlainStruct|unownedRef|unownedRef|{direct}Xo|sym|unowned|runtime=notStrong|expected=unownedRef:unowned|OK
+SPIKE|TYPE|GenericClass<Target>|path=class GenericClass → stop: ObjC class _TtCs12_SwiftObject|failure=-|fields=4/4|mirrorLabels=4|runtimeFields=4
+SPIKE|FIELD|GenericClass<Target>|0|GenericClass|strongRef|strongRef|x|plain|strong|runtime=strong|expected=strongRef:strong|OK
+SPIKE|FIELD|GenericClass<Target>|1|GenericClass|weakRef|weakRef|xSgXw|plain|weak|runtime=notStrong|expected=weakRef:weak|OK
+SPIKE|FIELD|GenericClass<Target>|2|GenericClass|unownedRef|unownedRef|xXo|plain|unowned|runtime=notStrong|expected=unownedRef:unowned|OK
+SPIKE|FIELD|GenericClass<Target>|3|GenericClass|strongArray|strongArray|SayxG|plain|strong|runtime=strong|expected=strongArray:strong|OK
+SPIKE|OBJC|GenericClass<Target>|ivars=4|strongRef,weakRef,unownedRef,strongArray|weakIvarLayout=nil|strongIvarLayout=nil
+SPIKE|TYPE|GenericStruct<ExternalTarget,Int>|path=value type → descriptor GenericStruct|failure=-|fields=4/4|mirrorLabels=4|runtimeFields=4
+SPIKE|FIELD|GenericStruct<ExternalTarget,Int>|0|GenericStruct|strongRef|strongRef|x|plain|strong|runtime=strong|expected=strongRef:strong|OK
+SPIKE|FIELD|GenericStruct<ExternalTarget,Int>|1|GenericStruct|weakRef|weakRef|xSgXw|plain|weak|runtime=notStrong|expected=weakRef:weak|OK
+SPIKE|FIELD|GenericStruct<ExternalTarget,Int>|2|GenericStruct|unownedRef|unownedRef|xXo|plain|unowned|runtime=notStrong|expected=unownedRef:unowned|OK
+SPIKE|FIELD|GenericStruct<ExternalTarget,Int>|3|GenericStruct|payload|payload|q_|plain|strong|runtime=strong|expected=payload:strong|OK
+SPIKE|TYPE|GenericSubclass<Target>|path=class GenericSubclass → class GenericBase → stop: ObjC class _TtCs12_SwiftObject|failure=-|fields=3/3|mirrorLabels=3|runtimeFields=3
+SPIKE|FIELD|GenericSubclass<Target>|0|GenericSubclass|unownedChild|unownedChild|xXo|plain|unowned|runtime=notStrong|expected=unownedChild:unowned|OK
+SPIKE|FIELD|GenericSubclass<Target>|1|GenericSubclass|strongChild|strongChild|x|plain|strong|runtime=strong|expected=strongChild:strong|OK
+SPIKE|FIELD|GenericSubclass<Target>|2|GenericBase|weakBase|weakBase|xSgXw|plain|weak|runtime=notStrong|expected=weakBase:weak|OK
+SPIKE|OBJC|GenericSubclass<Target>|ivars=2|unownedChild,strongChild|weakIvarLayout=nil|strongIvarLayout=nil
+SPIKE|TYPE|LazyAndWrappers|path=class LazyAndWrappers → stop: ObjC class _TtCs12_SwiftObject|failure=-|fields=5/5|mirrorLabels=5|runtimeFields=5
+SPIKE|FIELD|LazyAndWrappers|0|LazyAndWrappers|$__lazy_storage_$_lazyStrong|$__lazy_storage_$_lazyStrong|{direct}Sg|sym|strong|runtime=strong|expected=$__lazy_storage_$_lazyStrong:strong|OK
+SPIKE|FIELD|LazyAndWrappers|1|LazyAndWrappers|$__lazy_storage_$_lazyOptional|$__lazy_storage_$_lazyOptional|{direct}SgSg|sym|strong|runtime=strong|expected=$__lazy_storage_$_lazyOptional:strong|OK
+SPIKE|FIELD|LazyAndWrappers|2|LazyAndWrappers|_wrappedWeak|_wrappedWeak|{direct}y{direct}G|sym|strong|runtime=strong|expected=_wrappedWeak:strong|OK
+SPIKE|FIELD|LazyAndWrappers|3|LazyAndWrappers|_boxedStrong|_boxedStrong|{direct}y{direct}G|sym|strong|runtime=strong|expected=_boxedStrong:strong|OK
+SPIKE|FIELD|LazyAndWrappers|4|LazyAndWrappers|plainWeak|plainWeak|{direct}SgXw|sym|weak|runtime=notStrong|expected=plainWeak:weak|OK
+SPIKE|OBJC|LazyAndWrappers|ivars=5|$__lazy_storage_$_lazyStrong,$__lazy_storage_$_lazyOptional,_wrappedWeak,_boxedStrong,plainWeak|weakIvarLayout=nil|strongIvarLayout=nil
+SPIKE|NESTED|LazyAndWrappers|_wrappedWeak: WeakRef<Target>|value|xSgXw|weak
+SPIKE|SUMMARY|Q1|9/9
+SPIKE|SUMMARY|Q2|43/43
+SPIKE|SUMMARY|Q3|43/43
