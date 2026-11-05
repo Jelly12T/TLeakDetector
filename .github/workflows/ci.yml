@@ -21,7 +21,7 @@ jobs:
   package:
     name: Package build & test
     runs-on: macos-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - run: xcodebuild -version && swift --version
@@ -29,8 +29,13 @@ jobs:
         run: swift build
       - name: Build (Release)
         run: swift build -c release
-      - name: Test
+      - name: Test on macOS (LeakCore)
         run: swift test
+      - name: Test on iOS Simulator (LeakCore + LeakUIKit)
+        run: |
+          UDID=$(xcrun simctl list devices available | grep -m1 -E '^\s+iPhone' | grep -oE '[0-9A-F-]{36}')
+          echo "Simulator: $UDID"
+          xcodebuild test -scheme TLeakDetector -destination "id=$UDID"
 
   release-check:
     name: Release has no tool symbols

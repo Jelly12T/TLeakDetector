@@ -73,18 +73,25 @@ APPS=("$ARCHIVE"/Products/Applications/*.app)
 # ---------------------------------------------------------------------------
 # 2. What to look for
 # ---------------------------------------------------------------------------
-# Module and product names, the compile flag, plus every type declared in Sources/.
-# Swift mangled names embed the module name (e.g. $s8LeakCore...), so module
-# names catch any Swift symbol; type names catch ObjC runtime names and strings.
-PATTERNS=("TLeakDetector" "LEAK_DETECTOR")
-for dir in "$ROOT"/Sources/*/; do PATTERNS+=("$(basename "$dir")"); done
-while IFS= read -r t; do PATTERNS+=("$t"); done < <(
-  grep -rhoE '\b(class|struct|enum|protocol|actor)[[:space:]]+[A-Z][A-Za-z0-9_]{3,}' "$ROOT/Sources" \
-    | awk '{print $2}' | sort -u
+# a) Module and product names and the compile flag, matched as SUBSTRINGS.
+#    Swift mangled names embed the module name ($s8LeakCore12LeakRegistryC...), so these
+#    catch every Swift symbol, nested types included. They have no word boundary
+#    (a digit precedes them), hence substring matching.
+MODULES=("TLeakDetector" "LEAK_DETECTOR")
+for dir in "$ROOT"/Sources/*/; do MODULES+=("$(basename "$dir")"); done
+# b) Top-level type names declared in Sources/, matched as WHOLE WORDS, to catch plain
+#    strings (e.g. an ObjC-visible class name). Nested types are skipped: they are covered
+#    by (a), and their names are often generic words ("Item", "Found" would hit "Foundation").
+TYPES=()
+while IFS= read -r t; do TYPES+=("$t"); done < <(
+  grep -rhE '^(@[A-Za-z]+ +)*((public|package|internal|private|fileprivate|open|final) +)*(class|struct|enum|protocol|actor) +[A-Z][A-Za-z0-9_]{3,}' "$ROOT/Sources" \
+    | sed -E 's/.*(class|struct|enum|protocol|actor) +([A-Za-z0-9_]+).*/\2/' | sort -u
 )
-PATTERNS=($(printf '%s\n' "${PATTERNS[@]}" | sort -u))
-REGEX="$(IFS='|'; echo "${PATTERNS[*]}")"
-echo "==> Patterns: ${PATTERNS[*]}"
+MODULE_REGEX="$(IFS='|'; echo "${MODULES[*]}")"
+TYPE_REGEX="$(IFS='|'; echo "${TYPES[*]:-__no_types__}")"
+echo "==> Substring patterns: ${MODULES[*]}"
+echo "==> Whole-word types:   ${TYPES[*]:-<none>}"
+
 
 # ---------------------------------------------------------------------------
 # 3. Scan every Mach-O inside the .app (main binary, frameworks, extensions)
@@ -95,8 +102,10 @@ while IFS= read -r -d '' f; do
   file -b "$f" | grep -q 'Mach-O' || continue
   SCANNED=$((SCANNED + 1))
   rel="${f#"$ARCHIVE"/}"
-  sym_hits="$(nm -a "$f" 2>/dev/null | grep -E "$REGEX" | head -20 || true)"
-  str_hits="$(strings -a "$f" 2>/dev/null | grep -E "$REGEX" | head -20 || true)"
+  syms="$(nm -a "$f" 2>/dev/null || true)"
+  strs="$(strings -a "$f" 2>/dev/null || true)"
+  sym_hits="$( { grep -E "$MODULE_REGEX" <<<"$syms"; grep -wE "$TYPE_REGEX" <<<"$syms"; } | sort -u | head -20 || true)"
+  str_hits="$( { grep -E "$MODULE_REGEX" <<<"$strs"; grep -wE "$TYPE_REGEX" <<<"$strs"; } | sort -u | head -20 || true)"
   [[ -n "$sym_hits" ]] && HITS+=$'\n'"[nm]      $rel"$'\n'"$sym_hits"
   [[ -n "$str_hits" ]] && HITS+=$'\n'"[strings] $rel"$'\n'"$str_hits"
 done < <(find "${APPS[@]}" -type f -print0)

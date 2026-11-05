@@ -3,8 +3,9 @@
 Tool phát hiện memory leak của UIViewController trên iOS, **chỉ chạy ở Debug**.
 Bản Release vẫn build module nhưng module rỗng, không có symbol nào của tool.
 
-> **Trạng thái:** mới có nền móng: package an toàn cho Release, app LeakZoo để chấm tool, và spike cho phần graph.
-> `TLeakDetector.install()` chưa phát hiện leak nào. Logic phát hiện sẽ được thêm ở các sprint sau.
+> **Trạng thái:** đã có lifetime core: registry weak, mark cả subtree của VC, check hai tầng T1 (2 giây) / T2 (8 giây),
+> bỏ qua VC đã được gắn lại vào hierarchy. **Chưa có hook vào UIViewController**, nên `TLeakDetector.install()`
+> vẫn chưa tự phát hiện leak trong app. Hook sẽ được thêm ở sprint sau.
 
 ## Cài đặt
 
