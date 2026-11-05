@@ -1,3 +1,10 @@
+//
+//  LeakCoreTests.swift
+//  TLeakDetector
+//
+//  Created by thachlh on 5/11/26.
+//
+
 #if LEAK_DETECTOR_ENABLED
 import Testing
 @testable import LeakCore

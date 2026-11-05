@@ -1,3 +1,10 @@
+//
+//  LeakCore.swift
+//  TLeakDetector
+//
+//  Created by thachlh on 5/11/26.
+//
+
 #if LEAK_DETECTOR_ENABLED
 
 /// Core state of the detector. Platform-agnostic: no UIKit import allowed here.

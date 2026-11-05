@@ -1,0 +1,270 @@
+{
+  "version": 1,
+  "scenarios": [
+    {
+      "id": "Z01",
+      "name": "Closure property captures self",
+      "expectation": "leak_cycle",
+      "navigation": "push_pop",
+      "pattern": "Closure lưu trong property bắt self mạnh",
+      "retainPath": "Z01 → onRefresh → closure → Z01",
+      "objects": [
+        {
+          "log": "Z01",
+          "className": "Z01ClosurePropertyViewController",
+          "leaks": true
+        }
+      ]
+    },
+    {
+      "id": "Z02",
+      "name": "Strong delegate",
+      "expectation": "leak_cycle",
+      "navigation": "present_dismiss",
+      "pattern": "Delegate khai báo strong thay vì weak",
+      "retainPath": "Z02 → worker → delegate → Z02",
+      "objects": [
+        {
+          "log": "Z02",
+          "className": "Z02StrongDelegateViewController",
+          "leaks": true
+        }
+      ]
+    },
+    {
+      "id": "Z03",
+      "name": "UIAction captures self",
+      "expectation": "leak_cycle",
+      "navigation": "push_pop",
+      "pattern": "Closure của UIAction trên button bắt self mạnh",
+      "retainPath": "Z03 → view → button → UIAction → Z03",
+      "objects": [
+        {
+          "log": "Z03",
+          "className": "Z03ButtonActionViewController",
+          "leaks": true
+        }
+      ]
+    },
+    {
+      "id": "Z04",
+      "name": "Removed child keeps itself alive",
+      "expectation": "leak_cycle",
+      "navigation": "add_remove_child",
+      "pattern": "Child VC bị remove nhưng có cycle closure với chính nó",
+      "retainPath": "Z04 → onUpdate → closure → Z04",
+      "objects": [
+        {
+          "log": "Z04.host",
+          "className": "ChildHostViewController",
+          "leaks": false
+        },
+        {
+          "log": "Z04",
+          "className": "Z04ChildClosureViewController",
+          "leaks": true
+        }
+      ]
+    },
+    {
+      "id": "Z05",
+      "name": "Sibling cycle on popToRoot",
+      "expectation": "leak_cycle",
+      "navigation": "pop_to_root",
+      "pattern": "Hai màn trong stack giữ nhau strong, rồi popToRoot",
+      "retainPath": "Z05.2 → nextLevel → Z05.3 → previousLevel → Z05.2",
+      "objects": [
+        {
+          "log": "Z05.1",
+          "className": "Z05Level1ViewController",
+          "leaks": false
+        },
+        {
+          "log": "Z05.2",
+          "className": "Z05Level2ViewController",
+          "leaks": true
+        },
+        {
+          "log": "Z05.3",
+          "className": "Z05Level3ViewController",
+          "leaks": true
+        }
+      ]
+    },
+    {
+      "id": "Z06",
+      "name": "Combine sink captures self",
+      "expectation": "leak_cycle",
+      "navigation": "present_dismiss",
+      "pattern": "sink bắt self mạnh, lưu vào cancellables của chính self",
+      "retainPath": "Z06 → cancellables → sink → closure → Z06",
+      "objects": [
+        {
+          "log": "Z06",
+          "className": "Z06CombineSinkViewController",
+          "leaks": true
+        }
+      ]
+    },
+    {
+      "id": "Z07",
+      "name": "Timer never invalidated",
+      "expectation": "leak_rooted",
+      "navigation": "push_pop",
+      "pattern": "Timer lặp bắt self mạnh, không invalidate",
+      "retainPath": "RunLoop → Timer → closure → Z07",
+      "objects": [
+        {
+          "log": "Z07",
+          "className": "Z07TimerViewController",
+          "leaks": true
+        }
+      ]
+    },
+    {
+      "id": "Z08",
+      "name": "Notification observer never removed",
+      "expectation": "leak_rooted",
+      "navigation": "present_dismiss",
+      "pattern": "Observer dạng block bắt self mạnh, không remove",
+      "retainPath": "NotificationCenter → observer → block → Z08",
+      "objects": [
+        {
+          "log": "Z08",
+          "className": "Z08NotificationObserverViewController",
+          "leaks": true
+        }
+      ]
+    },
+    {
+      "id": "Z09",
+      "name": "Task on endless AsyncStream",
+      "expectation": "leak_rooted",
+      "navigation": "push_pop",
+      "pattern": "Task lặp trên AsyncStream không bao giờ finish, không cancel",
+      "retainPath": "ZooEventBus.shared → stream → Task → Z09",
+      "objects": [
+        {
+          "log": "Z09",
+          "className": "Z09StreamTaskViewController",
+          "leaks": true
+        }
+      ]
+    },
+    {
+      "id": "Z10",
+      "name": "Static registry holds screen",
+      "expectation": "leak_rooted",
+      "navigation": "present_dismiss",
+      "pattern": "Biến static giữ VC, không bao giờ xoá",
+      "retainPath": "Z10ScreenRegistry.screens → Z10",
+      "objects": [
+        {
+          "log": "Z10",
+          "className": "Z10StaticRegistryViewController",
+          "leaks": true
+        }
+      ]
+    },
+    {
+      "id": "Z11",
+      "name": "Closure with weak self",
+      "expectation": "no_leak",
+      "navigation": "push_pop",
+      "pattern": "Như Z01 nhưng [weak self]",
+      "objects": [
+        {
+          "log": "Z11",
+          "className": "Z11WeakClosureViewController",
+          "leaks": false
+        }
+      ]
+    },
+    {
+      "id": "Z12",
+      "name": "Task cancelled on disappear",
+      "expectation": "no_leak",
+      "navigation": "present_dismiss",
+      "pattern": "Như Z09 nhưng cancel Task ở viewDidDisappear",
+      "objects": [
+        {
+          "log": "Z12",
+          "className": "Z12CancelledTaskViewController",
+          "leaks": false
+        }
+      ]
+    },
+    {
+      "id": "Z13",
+      "name": "Timer invalidated on disappear",
+      "expectation": "no_leak",
+      "navigation": "push_pop",
+      "pattern": "Như Z07 nhưng invalidate ở viewDidDisappear",
+      "objects": [
+        {
+          "log": "Z13",
+          "className": "Z13InvalidatedTimerViewController",
+          "leaks": false
+        }
+      ]
+    },
+    {
+      "id": "Z14",
+      "name": "asyncAfter delays release",
+      "expectation": "no_leak",
+      "navigation": "push_pop",
+      "pattern": "asyncAfter 1 giây bắt self, deinit chạy trễ khoảng 1 giây",
+      "deinitDelaySeconds": 1.0,
+      "objects": [
+        {
+          "log": "Z14",
+          "className": "Z14AsyncAfterViewController",
+          "leaks": false
+        }
+      ]
+    },
+    {
+      "id": "Z15",
+      "name": "Child added and removed",
+      "expectation": "no_leak",
+      "navigation": "add_remove_child",
+      "pattern": "Add rồi remove child đúng cách",
+      "objects": [
+        {
+          "log": "Z15.host",
+          "className": "ChildHostViewController",
+          "leaks": false
+        },
+        {
+          "log": "Z15",
+          "className": "Z15PlainChildViewController",
+          "leaks": false
+        }
+      ]
+    },
+    {
+      "id": "Z16",
+      "name": "Plain popToRoot",
+      "expectation": "no_leak",
+      "navigation": "pop_to_root",
+      "pattern": "Ba màn bình thường rồi popToRoot",
+      "objects": [
+        {
+          "log": "Z16.1",
+          "className": "Z16LevelViewController",
+          "leaks": false
+        },
+        {
+          "log": "Z16.2",
+          "className": "Z16LevelViewController",
+          "leaks": false
+        },
+        {
+          "log": "Z16.3",
+          "className": "Z16LevelViewController",
+          "leaks": false
+        }
+      ]
+    }
+  ]
+}

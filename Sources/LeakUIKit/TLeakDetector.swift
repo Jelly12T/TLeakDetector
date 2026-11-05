@@ -1,3 +1,10 @@
+//
+//  TLeakDetector.swift
+//  TLeakDetector
+//
+//  Created by thachlh on 5/11/26.
+//
+
 #if LEAK_DETECTOR_ENABLED && canImport(UIKit)
 import UIKit
 import LeakCore

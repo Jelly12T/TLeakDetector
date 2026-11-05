@@ -1,3 +1,10 @@
+//
+//  AppDelegate.swift
+//  HostApp
+//
+//  Created by thachlh on 5/11/26.
+//
+
 import UIKit
 #if DEBUG
 import LeakUIKit
