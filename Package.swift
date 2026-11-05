@@ -13,6 +13,8 @@ let package = Package(
     platforms: [
         // Must match the minimum iOS of the host app.
         .iOS(.v15),
+        // Only so LeakCore (no UIKit) builds and tests on a Mac / CI.
+        .macOS(.v13),
     ],
     products: [
         // Single product: the app adds one dependency only.
@@ -24,5 +26,7 @@ let package = Package(
         // Hooks into UIViewController and reports to LeakCore. One-way dependency.
         .target(name: "LeakUIKit", dependencies: ["LeakCore"], swiftSettings: leakSettings),
         .testTarget(name: "LeakCoreTests", dependencies: ["LeakCore"], swiftSettings: leakSettings),
+        // UIKit parts; runs on an iOS simulator (empty on macOS).
+        .testTarget(name: "LeakUIKitTests", dependencies: ["LeakUIKit", "LeakCore"], swiftSettings: leakSettings),
     ]
 )
