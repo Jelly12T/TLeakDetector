@@ -1,0 +1,69 @@
+# CI for TLeakDetector.
+# Runs on every push to main and every pull request.
+#
+#   package        swift build / test of the main package (Debug + Release build)
+#   release-check  TLeakDetector must never be in a Release binary (ADR 001)
+#   leakzoo        LeakZoo app still compiles (it is the grading app for the tool)
+#   spike          Field-ownership reader still matches the Swift runtime (ADR 002)
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    name: Package build & test
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - run: xcodebuild -version && swift --version
+      - name: Build (Debug)
+        run: swift build
+      - name: Build (Release)
+        run: swift build -c release
+      - name: Test
+        run: swift test
+
+  release-check:
+    name: Release has no tool symbols
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - run: xcodebuild -version
+      - name: Release archive must be clean
+        run: scripts/check-release-symbols.sh --configuration Release
+      - name: Debug archive must contain the tool (proves the scan works)
+        run: scripts/check-release-symbols.sh --configuration Debug --expect-present
+
+  leakzoo:
+    name: LeakZoo builds
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - run: xcodebuild -version
+      - name: Build LeakZoo for the simulator
+        run: |
+          xcodebuild build \
+            -project LeakZoo/LeakZoo.xcodeproj -scheme LeakZoo -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO
+
+  spike:
+    name: Field-ownership spike
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reader matches the Swift runtime on every sample field
+        working-directory: Spikes/FieldOwnership
+        run: swift test --filter testExpectations
