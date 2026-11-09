@@ -33,6 +33,7 @@ enum SubtreeCollector {
         return walker.items
     }
 
+    @MainActor
     private struct Walker {
         let filter: SubtreeFilter
         var items: [Item] = []
