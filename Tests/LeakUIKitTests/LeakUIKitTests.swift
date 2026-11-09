@@ -22,6 +22,13 @@ private func isTestType(_ cls: AnyClass) -> Bool {
     ObjectIdentifier(cls) == ObjectIdentifier(ScreenModel.self)
 }
 
+/// Test classes live in the test bundle, not `Bundle.main`: treat everything outside UIKit as app.
+func isNotUIKit(_ cls: AnyClass) -> Bool {
+    Bundle(for: cls) != Bundle(for: UIViewController.self)
+}
+
+let testFilter = SubtreeFilter(viewController: isNotUIKit, property: isTestType)
+
 private func paths(_ items: [SubtreeCollector.Item]) -> [String] { items.map(\.path) }
 
 @MainActor
@@ -37,7 +44,7 @@ struct SubtreeCollectorTests {
         let label = UILabel()
         screen.view.addSubview(label)
 
-        let items = SubtreeCollector.collect(from: screen, includeProperty: isTestType)
+        let items = SubtreeCollector.collect(from: screen, filter: testFilter)
         let all = paths(items)
         #expect(all.first == "ScreenVC")
         #expect(all.contains("ScreenVC.children[0]"))
@@ -51,7 +58,7 @@ struct SubtreeCollectorTests {
     @Test("Does not load a view that was never loaded")
     func doesNotLoadView() {
         let screen = ScreenVC()
-        let items = SubtreeCollector.collect(from: screen, includeProperty: isTestType)
+        let items = SubtreeCollector.collect(from: screen, filter: testFilter)
         #expect(!screen.isViewLoaded)
         #expect(paths(items) == ["ScreenVC", "ScreenVC.model"])
     }
@@ -61,7 +68,7 @@ struct SubtreeCollectorTests {
         let screen = ScreenVC()
         let shared = ScreenModel()
         screen.weakModel = shared
-        let items = SubtreeCollector.collect(from: screen, includeProperty: isTestType)
+        let items = SubtreeCollector.collect(from: screen, filter: testFilter)
         #expect(paths(items).contains("ScreenVC.weakModel"))
     }
 }
@@ -139,7 +146,7 @@ struct EndToEndTests {
         do {
             let clean = ScreenVC()
             clean.loadViewIfNeeded()
-            TLeakDetector.expectDeallocation(of: clean, trigger: .pop, in: registry, includeProperty: isTestType)
+            TLeakDetector.expectDeallocation(of: clean, trigger: .pop, in: registry, filter: testFilter)
         }
         scheduler.advance(by: 10)
         #expect(box.items.isEmpty)
@@ -147,7 +154,7 @@ struct EndToEndTests {
         // 2. A screen kept alive from outside.
         let leaked = ScreenVC()
         leaked.loadViewIfNeeded()
-        TLeakDetector.expectDeallocation(of: leaked, trigger: .dismiss, in: registry, includeProperty: isTestType)
+        TLeakDetector.expectDeallocation(of: leaked, trigger: .dismiss, in: registry, filter: testFilter)
         scheduler.advance(by: 2)
         #expect(box.items.isEmpty)                         // T1 is never conclusive
         scheduler.advance(by: 6)

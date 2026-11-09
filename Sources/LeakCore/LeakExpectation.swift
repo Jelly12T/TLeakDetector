@@ -11,9 +11,9 @@ import Foundation
 /// What made us expect the object to die.
 package enum LeakTrigger: String, Sendable {
     case pop
-    case popToRoot
     case dismiss
     case removeFromParent
+    case replaceRoot
     case manual
 }
 

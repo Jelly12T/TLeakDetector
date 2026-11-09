@@ -9,6 +9,14 @@
 import UIKit
 import LeakCore
 
+struct SubtreeFilter: Sendable {
+    /// VCs rejected here (system containers, alerts…) are not marked, but their children are still walked.
+    var viewController: @Sendable (AnyClass) -> Bool
+    var property: @Sendable (AnyClass) -> Bool
+
+    static let app = SubtreeFilter(viewController: isAppType, property: isAppType)
+}
+
 /// Everything that must die together with a closing view controller:
 /// the VC, its children, what it presented, its whole view hierarchy, and the
 /// app-module objects held in its stored properties.
@@ -19,17 +27,14 @@ enum SubtreeCollector {
         let path: String
     }
 
-    /// - Parameter includeProperty: which property types to follow (default: types in the app bundle).
-    static func collect(from root: UIViewController, includeProperty: (AnyClass) -> Bool) -> [Item] {
-        withoutActuallyEscaping(includeProperty) { include in
-            var walker = Walker(includeProperty: include)
-            walker.visit(root, path: String(describing: type(of: root)))
-            return walker.items
-        }
+    static func collect(from root: UIViewController, filter: SubtreeFilter) -> [Item] {
+        var walker = Walker(filter: filter)
+        walker.visit(root, path: String(describing: type(of: root)))
+        return walker.items
     }
 
     private struct Walker {
-        let includeProperty: (AnyClass) -> Bool
+        let filter: SubtreeFilter
         var items: [Item] = []
         var seen: Set<ObjectIdentifier> = []
 
@@ -40,7 +45,12 @@ enum SubtreeCollector {
         }
 
         mutating func visit(_ vc: UIViewController, path: String) {
-            guard add(vc, path: path) else { return }
+            let isApp = filter.viewController(type(of: vc))
+            if isApp {
+                guard add(vc, path: path) else { return }
+            } else {
+                guard seen.insert(ObjectIdentifier(vc)).inserted else { return }
+            }
 
             // Children first, so their views get the child's path.
             for (index, child) in vc.children.enumerated() {
@@ -51,11 +61,13 @@ enum SubtreeCollector {
             if let presented = vc.presentedViewController, presented.presentingViewController === vc {
                 visit(presented, path: "\(path).presented")
             }
+            guard isApp else { return }
+
             // Never force-load a view that was never shown.
             if let view = vc.viewIfLoaded {
                 visit(view, path: "\(path).view")
             }
-            for property in PropertyScanner.classProperties(of: vc, include: includeProperty) {
+            for property in PropertyScanner.classProperties(of: vc, include: filter.property) {
                 _ = add(property.object, path: "\(path).\(property.label)")
             }
         }
@@ -69,7 +81,7 @@ enum SubtreeCollector {
     }
 }
 
-/// Default property filter: the type is compiled into the app itself.
+/// Types in the app's own dynamic frameworks do not count.
 func isAppType(_ cls: AnyClass) -> Bool {
     Bundle(for: cls) == Bundle.main
 }

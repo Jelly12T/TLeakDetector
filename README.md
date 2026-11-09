@@ -3,9 +3,14 @@
 Tool phát hiện memory leak của UIViewController trên iOS, **chỉ chạy ở Debug**.
 Bản Release vẫn build module nhưng module rỗng, không có symbol nào của tool.
 
-> **Trạng thái:** đã có lifetime core: registry weak, mark cả subtree của VC, check hai tầng T1 (2 giây) / T2 (8 giây),
-> bỏ qua VC đã được gắn lại vào hierarchy. **Chưa có hook vào UIViewController**, nên `TLeakDetector.install()`
-> vẫn chưa tự phát hiện leak trong app. Hook sẽ được thêm ở sprint sau.
+> **Trạng thái:** `TLeakDetector.install()` tự mark VC khi rời màn hình (pop, dismiss, remove child, đổi
+> `rootViewController`), mark cả subtree, check T1 (2 giây) / T2 (8 giây) rồi in `[TLeakDetector] LEAK? ...` ra console.
+> Chạy với env `TLEAK_VERBOSE=1` để log mỗi lần mark.
+>
+> Giới hạn hiện tại:
+> - Chỉ VC compile trong app target mới được mark. VC nằm trong dynamic framework bị bỏ qua.
+> - Container tự viết phải gọi `willMove(toParent: nil)` trước `removeFromParent()`, đúng contract của UIKit.
+> - VC được cache lại sau khi đóng (giữ để mở lại) sẽ bị báo leak.
 
 ## Cài đặt
 
@@ -27,6 +32,17 @@ func application(_ application: UIApplication,
 
 Yêu cầu: iOS 15+, Xcode 16+ (Swift tools 6.0).
 
+## Mở trong Xcode
+
+```sh
+open Workspace/JellyLeakDetector.xcworkspace
+```
+
+Workspace gồm package, LeakZoo và HostApp. Sửa code tool rồi chạy LeakZoo (⌘R) là thấy ngay, không cần build riêng.
+Test: scheme `TLeakDetector` + iOS Simulator, ⌘U.
+
+Workspace nằm trong thư mục con để `xcodebuild` ở thư mục gốc vẫn dùng `Package.swift` (CI dựa vào điều này).
+
 ## Cấu trúc repo
 
 ```
@@ -38,6 +54,7 @@ Yêu cầu: iOS 15+, Xcode 16+ (Swift tools 6.0).
 ├── scripts/check-release-symbols.sh   kiểm tra tool không lọt vào Release
 ├── Examples/HostApp/             app tối giản để script trên archive
 ├── LeakZoo/                      app 16 scenario leak / không leak, kèm expected.json
+├── Workspace/                    JellyLeakDetector.xcworkspace để mở mọi thứ trong Xcode
 ├── Spikes/                       thí nghiệm có timebox, không phải code production
 └── docs/adr/                     các quyết định kiến trúc
 ```
@@ -47,6 +64,7 @@ Yêu cầu: iOS 15+, Xcode 16+ (Swift tools 6.0).
 | `LeakCore` | Quyết định có leak hay không. Không import UIKit. |
 | `LeakUIKit` | Hook vào UIViewController, báo tin cho `LeakCore`. Chứa API public `TLeakDetector`. |
 | `LeakCoreTests` | Test cho `LeakCore`. |
+| `LeakUIKitTests` | Test cho `LeakUIKit`, chạy trên iOS Simulator. |
 
 Chiều phụ thuộc chỉ có một hướng: `LeakUIKit → LeakCore`. Các target khác được thêm khi tới sprint cần.
 

@@ -147,17 +147,17 @@ struct LeakRegistryTests {
     func addressReuse() throws {
         var oldID: ObjectIdentifier?
         do {
-            let old = Probe()
+            let old = ReuseProbe()
             oldID = ObjectIdentifier(old)
             registry.expectDeallocation(of: old, context: context("old"))
         }
         scheduler.advance(by: 1)
 
         // The allocator usually hands the same address to the next same-size object.
-        var keep: [Probe] = []
-        var reused: Probe?
+        var keep: [ReuseProbe] = []
+        var reused: ReuseProbe?
         for _ in 0..<1_000 {
-            let candidate = Probe()
+            let candidate = ReuseProbe()
             if ObjectIdentifier(candidate) == oldID { reused = candidate; break }
             keep.append(candidate)
         }
@@ -184,6 +184,11 @@ struct LeakRegistryTests {
         #expect(Set(reports.map(\.typeName)) == ["Probe", "OtherProbe"])
         withExtendedLifetime((a, b)) {}
     }
+}
+
+/// Odd size, so objects from suites running in parallel do not take the freed address.
+private final class ReuseProbe {
+    let payload: (Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int, Int) = (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
 }
 
 @MainActor

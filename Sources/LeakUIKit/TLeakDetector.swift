@@ -6,6 +6,7 @@
 //
 
 #if LEAK_DETECTOR_ENABLED && canImport(UIKit)
+import Foundation
 import UIKit
 import LeakCore
 
@@ -18,7 +19,7 @@ import LeakCore
 public enum TLeakDetector {
     public static func install() {
         guard LeakCore.markInstalled() else { return }
-        // Next sprint: UIViewController hooks call `expectDeallocation(of:trigger:)`.
+        LeaveHooks.install()
     }
 
     public static var isInstalled: Bool { LeakCore.isInstalled }
@@ -28,23 +29,36 @@ public enum TLeakDetector {
         attachment: UIKitAttachmentChecker(),
         onLeak: { print("[TLeakDetector] LEAK? \($0)") })
 
-    /// Marks `viewController` and its whole subtree as "must die soon".
-    static func expectDeallocation(of viewController: UIViewController, trigger: LeakTrigger) {
-        expectDeallocation(of: viewController, trigger: trigger, in: registry, includeProperty: isAppType)
+    /// `TLEAK_VERBOSE=1` logs every mark.
+    static let isVerbose = ProcessInfo.processInfo.environment["TLEAK_VERBOSE"] == "1"
+
+    static var leaveHandler: @MainActor (UIViewController, LeakTrigger) -> Void = { vc, trigger in
+        expectDeallocation(of: vc, trigger: trigger)
     }
 
+    static func expectDeallocation(of viewController: UIViewController, trigger: LeakTrigger) {
+        expectDeallocation(of: viewController, trigger: trigger, in: registry, filter: .app)
+    }
+
+    @discardableResult
     static func expectDeallocation(
         of viewController: UIViewController,
         trigger: LeakTrigger,
         in registry: LeakRegistry,
-        includeProperty: (AnyClass) -> Bool
-    ) {
+        filter: SubtreeFilter
+    ) -> Int {
+        let items = SubtreeCollector.collect(from: viewController, filter: filter)
+        guard !items.isEmpty else { return 0 }
         let rootName = String(describing: type(of: viewController))
-        for item in SubtreeCollector.collect(from: viewController, includeProperty: includeProperty) {
+        for item in items {
             registry.expectDeallocation(
                 of: item.object,
                 context: LeakContext(trigger: trigger, rootTypeName: rootName, path: item.path))
         }
+        if isVerbose {
+            print("[TLeakDetector] mark \(trigger.rawValue) \(rootName) (\(items.count) objects)")
+        }
+        return items.count
     }
 }
 
