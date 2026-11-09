@@ -135,7 +135,7 @@ struct AttachmentTests {
 @MainActor
 @Suite("End to end: VC closed → subtree marked → T1/T2")
 struct EndToEndTests {
-    @Test("Released screen: nothing reported. Screen kept alive by a cycle: whole subtree reported")
+    @Test("Released screen: nothing reported. Screen kept alive by a cycle: one report for the subtree")
     func endToEnd() {
         let scheduler = TestScheduler()
         let box = Reports()
@@ -158,8 +158,12 @@ struct EndToEndTests {
         scheduler.advance(by: 2)
         #expect(box.items.isEmpty)                         // T1 is never conclusive
         scheduler.advance(by: 6)
-        #expect(Set(box.items.map(\.context.path)) == ["ScreenVC", "ScreenVC.view", "ScreenVC.model"])
-        #expect(box.items.allSatisfy { $0.context.trigger == .dismiss && $0.context.rootTypeName == "ScreenVC" })
+        #expect(box.items.count == 1)
+        #expect(box.items.first?.kind == .screen)
+        #expect(box.items.first?.leaked.path == "ScreenVC")
+        #expect(box.items.first?.alsoAlive.map(\.path) == ["ScreenVC.view", "ScreenVC.model"])
+        #expect(box.items.first?.context.trigger == .dismiss)
+        #expect(box.items.first?.context.rootTypeName == "ScreenVC")
         withExtendedLifetime(leaked) {}
     }
 }

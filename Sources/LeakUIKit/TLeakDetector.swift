@@ -24,10 +24,14 @@ public enum TLeakDetector {
 
     public static var isInstalled: Bool { LeakCore.isInstalled }
 
+    /// `TLEAK_MODE=crash|debugger|log` overrides the default (debugger if attached, else crash).
+    static let reporter = LeakReporter(
+        mode: ProcessInfo.processInfo.environment["TLEAK_MODE"].flatMap(LeakReportMode.init(rawValue:)))
+
     static let registry = LeakRegistry(
         scheduler: MainQueueScheduler(),
         attachment: UIKitAttachmentChecker(),
-        onLeak: { print("[TLeakDetector] LEAK? \($0)") })
+        onLeak: { reporter.report($0) })
 
     /// `TLEAK_VERBOSE=1` logs every mark.
     static let isVerbose = ProcessInfo.processInfo.environment["TLEAK_VERBOSE"] == "1"
@@ -50,13 +54,12 @@ public enum TLeakDetector {
         let items = SubtreeCollector.collect(from: viewController, filter: filter)
         guard !items.isEmpty else { return 0 }
         let rootName = String(describing: type(of: viewController))
-        for item in items {
-            registry.expectDeallocation(
-                of: item.object,
-                context: LeakContext(trigger: trigger, rootTypeName: rootName, path: item.path))
-        }
+        registry.expectDeallocation(
+            of: items.map { (object: $0.object, path: $0.path) },
+            root: viewController,
+            context: LeakContext(trigger: trigger, rootTypeName: rootName))
         if isVerbose {
-            print("[TLeakDetector] mark \(trigger.rawValue) \(rootName) (\(items.count) objects)")
+            LeakLog.marks.debug("mark \(trigger.rawValue, privacy: .public) \(rootName, privacy: .public) (\(items.count) objects)")
         }
         return items.count
     }

@@ -8,14 +8,14 @@
 #if LEAK_DETECTOR_ENABLED
 import Foundation
 
-/// The heart of the tool: receives "this object must die", waits, checks, decides.
+/// The heart of the tool: receives "this subtree must die", waits, checks, decides.
 ///
-///     mark ──T1──► dead?      → done
-///                  attached?  → cancel
-///                  else       → wait for T2   (MVP has no graph, so T1 is never conclusive)
-///          ──T2──► dead?      → done
-///                  attached?  → cancel
-///                  else       → report leak
+///     mark ──T1──► all dead?       → done
+///                  root attached?  → cancel
+///                  else            → wait for T2   (MVP has no graph, so T1 is never conclusive)
+///          ──T2──► all dead?       → done
+///                  root attached?  → cancel
+///                  else            → one report with every object still alive
 ///
 /// T1 and T2 are measured from the mark. Holds every object weakly.
 @MainActor
@@ -38,10 +38,12 @@ package final class LeakRegistry {
     private let configuration: Configuration
     private let onLeak: @MainActor (LeakReport) -> Void
 
-    /// One expectation per object. Keyed by address, but always re-checked against the weak
-    /// reference: an address can be reused once the previous object is gone.
+    /// The latest expectation of each object: marking an object again moves it to the new mark.
+    /// Keyed by address, but always re-checked against the weak reference: an address can be
+    /// reused once the previous object is gone.
     private var expectations: [ObjectIdentifier: LeakExpectation] = [:]
-    private var nextToken: UInt64 = 0
+    private var marks: [UInt64: LeakMark] = [:]
+    private var lastMarkID: UInt64 = 0
 
     package init(
         scheduler: LeakScheduler,
@@ -63,57 +65,82 @@ package final class LeakRegistry {
         return existing
     }
 
-    /// Marks `object` as "must die". Marking the same object again restarts its timers.
-    package func expectDeallocation(of object: AnyObject, context: LeakContext) {
-        let id = ObjectIdentifier(object)
-        let token = makeToken()
-        if let existing = expectations[id], existing.object === object {
-            existing.restart(context: context, markedAt: scheduler.now, token: token)
-        } else {
-            // New object, or a dead one whose address got reused.
-            expectations[id] = LeakExpectation(object: object, context: context, markedAt: scheduler.now, token: token)
+    func stage(of object: AnyObject) -> LeakMark.Stage? {
+        expectation(for: object).flatMap { marks[$0.markID]?.stage }
+    }
+
+    /// Marks `members` as "must die" because `root` left. Members come root first, the report
+    /// is headed by the first one still alive.
+    package func expectDeallocation(
+        of members: [(object: AnyObject, path: String)],
+        root: AnyObject,
+        context: LeakContext
+    ) {
+        guard !members.isEmpty else { return }
+        lastMarkID += 1
+        let mark = LeakMark(id: lastMarkID, root: root, context: context, markedAt: scheduler.now)
+        for member in members {
+            // A screen that left on its own (e.g. a sibling in a cycle) is reported by its own mark.
+            if member.object !== root, let pending = expectation(for: member.object),
+               marks[pending.markID]?.root === member.object {
+                continue
+            }
+            let expectation = LeakExpectation(object: member.object, path: member.path, markID: mark.id)
+            expectations[expectation.objectID] = expectation
+            mark.members.append(expectation)
         }
-        schedule(id: id, token: token, after: configuration.t1, stage: .waitingT1)
+        marks[mark.id] = mark
+        schedule(mark.id, after: configuration.t1)
     }
 
     // MARK: - Timers
 
-    private func makeToken() -> UInt64 {
-        nextToken += 1
-        return nextToken
-    }
-
-    private func schedule(id: ObjectIdentifier, token: UInt64, after delay: TimeInterval, stage: LeakExpectation.Stage) {
+    private func schedule(_ id: UInt64, after delay: TimeInterval) {
         scheduler.schedule(after: delay) { [weak self] in
-            self?.check(id: id, token: token, stage: stage)
+            self?.check(id)
         }
     }
 
-    private func check(id: ObjectIdentifier, token: UInt64, stage: LeakExpectation.Stage) {
-        // A newer mark (or a newer object at this address) owns the expectation now.
-        guard let expectation = expectations[id], expectation.token == token else { return }
+    private func check(_ id: UInt64) {
+        guard let mark = marks[id] else { return }
+        // The screen came back: everything it holds is legitimately alive.
+        let rootIsAttached = mark.root.map { attachment.isAttached($0) } ?? false
 
-        guard let object = expectation.object else {
-            expectations[id] = nil          // died: all good
+        var alive: [(expectation: LeakExpectation, object: AnyObject)] = []
+        // Members marked again since belong to a newer mark.
+        for member in mark.members where expectations[member.objectID] === member {
+            if !rootIsAttached, let object = member.object, !attachment.isAttached(object) {
+                alive.append((member, object))
+            } else {
+                expectations[member.objectID] = nil
+            }
+        }
+        mark.members = alive.map(\.expectation)
+        guard !alive.isEmpty else {
+            marks[id] = nil
             return
         }
-        if attachment.isAttached(object) {
-            expectations[id] = nil          // back in the hierarchy: not expected to die anymore
-            return
-        }
 
-        switch stage {
+        switch mark.stage {
         case .waitingT1:
-            let next = makeToken()
-            expectation.advance(to: .waitingT2, token: next)
-            schedule(id: id, token: next, after: configuration.t2 - configuration.t1, stage: .waitingT2)
+            mark.stage = .waitingT2
+            schedule(id, after: configuration.t2 - configuration.t1)
         case .waitingT2:
-            expectations[id] = nil
-            onLeak(LeakReport(
-                typeName: expectation.typeName,
-                context: expectation.context,
-                markedAt: expectation.markedAt,
-                detectedAt: scheduler.now))
+            marks[id] = nil
+            for member in mark.members { expectations[member.objectID] = nil }
+            let objects = alive.map {
+                LeakReport.Object(typeName: $0.expectation.typeName, path: $0.expectation.path,
+                                  address: UInt(bitPattern: $0.expectation.objectID))
+            }
+            let report = LeakReport(
+                kind: mark.root == nil ? .outlived : .screen,
+                leaked: objects[0],
+                alsoAlive: Array(objects.dropFirst()),
+                context: mark.context,
+                markedAt: mark.markedAt,
+                detectedAt: scheduler.now)
+            // Keep them alive while the debugger is paused on the report.
+            withExtendedLifetime(alive) { onLeak(report) }
         }
     }
 }

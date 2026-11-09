@@ -4,7 +4,7 @@ Tool phát hiện memory leak của UIViewController trên iOS, **chỉ chạy �
 Bản Release vẫn build module nhưng module rỗng, không có symbol nào của tool.
 
 > **Trạng thái:** `TLeakDetector.install()` tự mark VC khi rời màn hình (pop, dismiss, remove child, đổi
-> `rootViewController`), mark cả subtree, check T1 (2 giây) / T2 (8 giây) rồi in `[TLeakDetector] LEAK? ...` ra console.
+> `rootViewController`), mark cả subtree, check T1 (2 giây) / T2 (8 giây) rồi báo leak (xem [Khi có leak](#khi-có-leak)).
 > Chạy với env `TLEAK_VERBOSE=1` để log mỗi lần mark.
 >
 > Giới hạn hiện tại:
@@ -31,6 +31,35 @@ func application(_ application: UIApplication,
 ```
 
 Yêu cầu: iOS 15+, Xcode 16+ (Swift tools 6.0).
+
+## Khi có leak
+
+Mỗi lần rời màn hình cho tối đa một report. Mỗi leak (tên type + `kind`) chỉ báo một lần trong một phiên chạy.
+
+| Tình huống | Mặc định |
+|---|---|
+| Có debugger (chạy từ Xcode) | App dừng ở debugger (`SIGTRAP`). Mở Memory Graph để soi object, bấm Continue để chạy tiếp |
+| Không có debugger | App crash (`assertionFailure`) kèm report |
+
+Đổi mode bằng env `TLEAK_MODE`: `debugger`, `crash` hoặc `log` (chỉ log, không dừng).
+`--autorun` của LeakZoo cần `TLEAK_MODE=log`, nếu không app sẽ dừng hoặc crash ở leak đầu tiên.
+
+Report đi qua `os_log`, subsystem `TLeakDetector`. Trong Console.app lọc bằng `subsystem:TLeakDetector`.
+
+```
+[TLeakDetector] LEAK Z01ClosurePropertyViewController (0x103808200) still alive 8.2s after pop of Z01ClosurePropertyViewController
+  kind: screen, the closed screen itself is still alive
+  path: Z01ClosurePropertyViewController
+  also alive (3):
+    UIView  Z01ClosurePropertyViewController.view
+    UIStackView  Z01ClosurePropertyViewController.view.subviews[0]
+    UILabel  Z01ClosurePropertyViewController.view.subviews[0].subviews[0]
+```
+
+| `kind` | Nghĩa |
+|---|---|
+| `screen` | Chính màn hình vừa đóng vẫn còn sống |
+| `outlived` | Màn hình đã chết nhưng một object nó giữ vẫn sống, tức có thứ bên ngoài đang giữ object đó |
 
 ## Mở trong Xcode
 
