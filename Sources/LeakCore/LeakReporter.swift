@@ -69,10 +69,10 @@ package final class LeakReporter {
         self.effects = effects
     }
 
-    package func report(_ report: LeakReport) {
-        guard reported.insert(report.signature).inserted else { return }
-        var message = report.description
-        if let suppression = suppressions.first(where: { $0.signature == report.signature }) {
+    package func report(_ finding: some LeakFinding) {
+        guard reported.insert(finding.signature).inserted else { return }
+        var message = finding.description
+        if let suppression = suppressions.first(where: { $0.signature == finding.signature }) {
             let note = "\(suppression.reason) (owner: \(suppression.owner))"
             guard effects.now() >= suppression.endsAt else {
                 effects.log(.default, message + "\n  suppressed until \(suppression.expires): \(note)")

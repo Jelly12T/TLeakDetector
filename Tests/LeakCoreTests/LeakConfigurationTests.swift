@@ -81,7 +81,7 @@ struct LeakSuppressionFileTests {
         #expect(loaded.problems == [
             #"LeakSuppressions.json: suppressions[1] (B): missing "reason", entry ignored"#,
             #"LeakSuppressions.json: suppressions[2] (C): "owner" must be a non-empty string, entry ignored"#,
-            #"LeakSuppressions.json: suppressions[3] (D): "kind" is "rooted", expected one of screen, outlived, entry ignored"#,
+            #"LeakSuppressions.json: suppressions[3] (D): "kind" is "rooted", expected one of screen, outlived, budget, entry ignored"#,
             #"LeakSuppressions.json: suppressions[4] (E): "expires" is "2026-02-30", expected a date like 2026-12-31, entry ignored"#,
             #"LeakSuppressions.json: suppressions[5]: must be an object, entry ignored"#,
             #"LeakSuppressions.json: suppressions[6]: missing "signature": {"type": ..., "kind": ...}, entry ignored"#,

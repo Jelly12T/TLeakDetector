@@ -11,6 +11,7 @@ import ObjectiveC
 import LeakCore
 
 /// Marks in `didMove`, not `willMove`: a cancelled interactive pop calls only `willMove(toParent: nil)`.
+/// Also counts view controllers for instance budgets at `viewDidLoad`.
 @MainActor
 enum LeaveHooks {
     /// Not `LeakCore.isInstalled`: that one can be reset, and swizzling twice undoes it.
@@ -28,6 +29,9 @@ enum LeaveHooks {
         swizzle(UIViewController.self,
                 #selector(UIViewController.viewDidDisappear(_:)),
                 #selector(UIViewController.tld_viewDidDisappear(_:)))
+        swizzle(UIViewController.self,
+                #selector(UIViewController.viewDidLoad),
+                #selector(UIViewController.tld_viewDidLoad))
         swizzle(UIWindow.self,
                 #selector(setter: UIWindow.rootViewController),
                 #selector(UIWindow.tld_setRootViewController(_:)))
@@ -91,6 +95,11 @@ enum LeaveHooks {
 }
 
 extension UIViewController {
+    @objc dynamic func tld_viewDidLoad() {
+        tld_viewDidLoad()
+        TLeakDetector.loadHandler(self)
+    }
+
     @objc dynamic func tld_willMove(toParent parent: UIViewController?) {
         tld_willMove(toParent: parent)
         LeaveHooks.willMove(self, toParent: parent)

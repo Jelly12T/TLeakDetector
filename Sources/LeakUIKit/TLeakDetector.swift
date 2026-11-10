@@ -34,6 +34,7 @@ public enum TLeakDetector {
     private(set) static var filter = SubtreeFilter.app(LeakConfiguration())
     private(set) static var reporter = LeakReporter(mode: modeOverride)
     private(set) static var registry = makeRegistry(LeakConfiguration())
+    private(set) static var budgets = LeakBudgetCounter([], onOverBudget: { reporter.report($0) })
 
     static func apply(_ configuration: LeakConfiguration) {
         let loaded = configuration.suppressionFile.map { LeakSuppressionFile.load($0) } ?? .init()
@@ -43,6 +44,18 @@ public enum TLeakDetector {
         filter = .app(configuration)
         reporter = LeakReporter(mode: modeOverride ?? configuration.mode, suppressions: loaded.suppressions)
         registry = makeRegistry(configuration)
+        budgets = LeakBudgetCounter(configuration.instanceBudgets, onOverBudget: { reporter.report($0) })
+    }
+
+    /// Counts `object` against its `LeakInstanceBudget`. Call at the end of `init`, inside `#if DEBUG`.
+    /// View controllers are counted at `viewDidLoad` without it.
+    public nonisolated static func track(_ object: AnyObject) {
+        let pending = PendingTrack(object)
+        if Thread.isMainThread {
+            MainActor.assumeIsolated { pending.track() }
+        } else {
+            DispatchQueue.main.async { MainActor.assumeIsolated { pending.track() } }
+        }
     }
 
     private static func makeRegistry(_ configuration: LeakConfiguration) -> LeakRegistry {
@@ -56,6 +69,8 @@ public enum TLeakDetector {
     static var leaveHandler: @MainActor (UIViewController, LeakTrigger) -> Void = { vc, trigger in
         expectDeallocation(of: vc, trigger: trigger)
     }
+
+    static var loadHandler: @MainActor (UIViewController) -> Void = { budgets.track($0) }
 
     static func expectDeallocation(of viewController: UIViewController, trigger: LeakTrigger) {
         expectDeallocation(of: viewController, trigger: trigger, in: registry, filter: filter)
@@ -79,6 +94,17 @@ public enum TLeakDetector {
             LeakLog.marks.debug("mark \(trigger.rawValue, privacy: .public) \(rootName, privacy: .public) (\(items.count) objects)")
         }
         return items.count
+    }
+}
+
+/// Hands an object from any thread to the main actor without keeping it alive. Only read on main.
+private final class PendingTrack: @unchecked Sendable {
+    private weak var object: AnyObject?
+
+    init(_ object: AnyObject) { self.object = object }
+
+    @MainActor func track() {
+        if let object { TLeakDetector.budgets.track(object) }
     }
 }
 

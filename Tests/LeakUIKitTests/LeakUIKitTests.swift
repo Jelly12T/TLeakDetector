@@ -19,6 +19,8 @@ final class ScreenVC: UIViewController {
 final class ChildVC: UIViewController {}
 final class CachedVC: UIViewController {}
 final class OptedOutVC: UIViewController, LeakOptOut {}
+final class BudgetedModel {}
+final class BudgetedVC: UIViewController {}
 
 private func isTestType(_ cls: AnyClass) -> Bool {
     ObjectIdentifier(cls) == ObjectIdentifier(ScreenModel.self)
@@ -212,6 +214,62 @@ struct EndToEndTests {
         withExtendedLifetime(leaked) {}
     }
 }
+
+@MainActor
+@Suite("Instance budget hooks", .serialized)
+struct InstanceBudgetHookTests {
+    @Test("viewDidLoad counts each view controller once")
+    func viewDidLoadCounts() {
+        LeaveHooks.install()
+        let recorder = LoadRecorder()
+        TLeakDetector.loadHandler = { [weak recorder] in recorder?.loaded.append(ObjectIdentifier($0)) }
+        defer { TLeakDetector.loadHandler = { TLeakDetector.budgets.track($0) } }
+
+        let screen = BudgetedVC()
+        screen.loadViewIfNeeded()
+        screen.loadViewIfNeeded()
+        #expect(recorder.loaded.filter { $0 == ObjectIdentifier(screen) }.count == 1)
+    }
+
+    @Test("Opening a budget-1 screen twice while the first is still alive is reported")
+    func secondScreenOverBudget() throws {
+        LeaveHooks.install()
+        TLeakDetector.apply(LeakConfiguration(mode: .log, suppressionFile: nil,
+                                              instanceBudgets: [.init(BudgetedVC.self, max: 1)]))
+        defer { TLeakDetector.apply(LeakConfiguration(suppressionFile: nil)) }
+
+        let first = BudgetedVC(), second = BudgetedVC()
+        first.loadViewIfNeeded()
+        #expect(TLeakDetector.budgets.aliveCount(of: BudgetedVC.self) == 1)
+        second.loadViewIfNeeded()
+        #expect(TLeakDetector.budgets.aliveCount(of: BudgetedVC.self) == 2)
+        withExtendedLifetime((first, second)) {}
+    }
+
+    @Test("track(_:) from a background thread is counted on the main thread")
+    func trackFromBackground() async {
+        TLeakDetector.apply(LeakConfiguration(mode: .log, suppressionFile: nil,
+                                              instanceBudgets: [.init(BudgetedModel.self, max: 1)]))
+        defer { TLeakDetector.apply(LeakConfiguration(suppressionFile: nil)) }
+
+        let model = BudgetedModel()
+        nonisolated(unsafe) let handedOver = model
+        await withCheckedContinuation { done in
+            DispatchQueue.global().async {
+                TLeakDetector.track(handedOver)
+                done.resume()
+            }
+        }
+        // The main-queue hop was enqueued before this continuation resumed.
+        #expect(TLeakDetector.budgets.aliveCount(of: BudgetedModel.self) == 1)
+        TLeakDetector.track(model)
+        #expect(TLeakDetector.budgets.aliveCount(of: BudgetedModel.self) == 1)
+        withExtendedLifetime(model) {}
+    }
+}
+
+@MainActor
+private final class LoadRecorder { var loaded: [ObjectIdentifier] = [] }
 
 @MainActor
 private final class Reports { var items: [LeakReport] = [] }

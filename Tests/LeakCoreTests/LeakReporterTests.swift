@@ -127,6 +127,18 @@ struct LeakReporterTests {
         #expect(log.text.contains("suppression expired on 2026-12-31: Cached on purpose (owner: thachlh)"))
     }
 
+    @Test("Budget findings go through the same reporter, deduplicated by their own signature")
+    func budgetFinding() {
+        let reporter = LeakReporter(mode: .log, effects: recorder.effects)
+        let budget = LeakBudgetReport(typeName: "ProfileVC", budget: 1, alive: [0xa, 0xb])
+        reporter.report(budget)
+        reporter.report(budget)
+        reporter.report(report("ProfileVC"))
+        #expect(recorder.logs.count == 2)
+        #expect(recorder.logs.first?.text.contains("kind: budget") == true)
+        #expect(recorder.logs.first?.text.contains("alive (oldest first): 0xa, 0xb") == true)
+    }
+
     @Test("A suppression covers its own signature only")
     func otherSignature() {
         LeakReporter(mode: .crash, suppressions: [suppression(kind: .outlived)], effects: recorder.effects)

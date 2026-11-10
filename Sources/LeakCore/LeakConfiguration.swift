@@ -12,6 +12,18 @@ import Foundation
 /// The protocol does not exist in Release: put conformances inside `#if DEBUG`.
 public protocol LeakOptOut: AnyObject {}
 
+/// At most `max` instances of `type`, subclasses included, alive at the same time.
+public struct LeakInstanceBudget {
+    public let type: AnyClass
+    public let max: Int
+
+    public init(_ type: AnyClass, max: Int) {
+        precondition(max >= 0, "an instance budget cannot be negative")
+        self.type = type
+        self.max = max
+    }
+}
+
 public struct LeakConfiguration {
     /// Seconds after leaving the screen of the first check.
     public var t1: TimeInterval
@@ -25,6 +37,8 @@ public struct LeakConfiguration {
     public var allowedTypes: [AnyClass]
     /// Known leaks that are only logged until their expiry date.
     public var suppressionFile: URL?
+    /// View controllers are counted at `viewDidLoad`; other types call `TLeakDetector.track(self)`.
+    public var instanceBudgets: [LeakInstanceBudget]
 
     public static var defaultSuppressionFile: URL? {
         Bundle.main.url(forResource: "LeakSuppressions", withExtension: "json")
@@ -36,7 +50,8 @@ public struct LeakConfiguration {
         mode: LeakReportMode? = nil,
         maxSubtreeDepth: Int? = nil,
         allowedTypes: [AnyClass] = [],
-        suppressionFile: URL? = LeakConfiguration.defaultSuppressionFile
+        suppressionFile: URL? = LeakConfiguration.defaultSuppressionFile,
+        instanceBudgets: [LeakInstanceBudget] = []
     ) {
         self.t1 = t1
         self.t2 = t2
@@ -44,6 +59,7 @@ public struct LeakConfiguration {
         self.maxSubtreeDepth = maxSubtreeDepth
         self.allowedTypes = allowedTypes
         self.suppressionFile = suppressionFile
+        self.instanceBudgets = instanceBudgets
     }
 }
 
@@ -51,15 +67,14 @@ extension LeakConfiguration {
     package var isExempt: @Sendable (AnyClass) -> Bool {
         let allowed = Set(allowedTypes.map { ObjectIdentifier($0) })
         return { cls in
-            if cls is LeakOptOut.Type { return true }
-            var current: AnyClass? = cls
-            while let candidate = current {
-                if allowed.contains(ObjectIdentifier(candidate)) { return true }
-                current = class_getSuperclass(candidate)
-            }
-            return false
+            cls is LeakOptOut.Type || superclasses(of: cls).contains { allowed.contains(ObjectIdentifier($0)) }
         }
     }
+}
+
+/// `cls` itself, then each superclass.
+func superclasses(of cls: AnyClass) -> some Sequence<AnyClass> {
+    sequence(first: cls, next: { class_getSuperclass($0) })
 }
 
 #endif
