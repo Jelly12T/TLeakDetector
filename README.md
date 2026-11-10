@@ -63,7 +63,8 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
 }
 ```
 
-Chỉ vậy thôi. Không phải gọi gì ở từng màn hình: tool tự biết khi nào màn hình đóng.
+Chỉ vậy thôi. Không phải gọi gì ở từng màn hình: tool tự biết khi nào màn hình đóng. Khi nào cần truyền thêm cài đặt vào
+lời gọi này thì xem [Cấu hình](#cấu-hình).
 
 > **Bắt buộc bọc `#if DEBUG`.** Ở Release, type `TLeakDetector` không tồn tại, nên quên bọc là lỗi compile chứ không
 > thể âm thầm lọt vào bản phát hành.
@@ -178,35 +179,39 @@ Tắt từng pattern bằng `LeakChecks(ignoredPatterns: [.strongDelegate])`.
 
 ## Cấu hình
 
-`install()` nhận một `LeakConfiguration`. Mọi tham số đều có giá trị mặc định, chỉ truyền cái cần đổi:
+**Đa số app chỉ cần `TLeakDetector.install()` như ở bước 2, không truyền gì.** Cứ chạy như vậy trước.
+
+Chỉ truyền thêm cài đặt khi gặp một trong các tình huống dưới đây. Cài đặt được truyền vào **chính lời gọi `install()`
+ở bước 2**, không phải gọi thêm lần nữa: vẫn chỉ gọi một lần, ở `didFinishLaunchingWithOptions`.
+
+| Bạn gặp | Dùng | Xem |
+|---|---|---|
+| Tool báo leak một màn hình mà app **cố ý giữ lại** (mini player, màn được cache…) | `allowedTypes` | [dưới](#màn-hình-giữ-lại-có-chủ-đích-allowedtypes) |
+| Nghi một model bị **tạo chồng nhiều lần** mà tool không báo | `instanceBudgets` | [dưới](#instance-budget) |
+| Codebase cũ có **leak thật nhưng chưa kịp sửa**, không muốn app dừng mãi | suppression file | [dưới](#suppression-file) |
+
+### Màn hình giữ lại có chủ đích (`allowedTypes`)
+
+Tool chỉ dựa vào một luật: **màn hình đã đóng thì phải được giải phóng**. Nó không biết ý định của bạn.
+
+Nhưng có những màn hình app cố ý giữ lại sau khi đóng. Đó là thiết kế, không phải lỗi:
+
+- mini player: đóng màn phát nhạc nhưng giữ lại để nhạc chạy tiếp và mở lại ngay;
+- màn nặng được cache: WebView, bản đồ… tạo một lần, giữ lại để lần sau mở nhanh;
+- màn được coordinator giữ có chủ đích: ví dụ màn login giữ lại để hiện khi token hết hạn.
+
+Với những màn này, tool sẽ báo leak (và dừng app) mỗi lần chúng đóng. `allowedTypes` là danh sách type tool **bỏ qua,
+không kiểm tra**, kể cả view, child và những gì chúng giữ:
 
 ```swift
 #if DEBUG
 TLeakDetector.install(LeakConfiguration(
-    allowedTypes: [MiniPlayerViewController.self],
-    instanceBudgets: [LeakInstanceBudget(ProfileViewModel.self, max: 1)]
+    allowedTypes: [MiniPlayerViewController.self]
 ))
 #endif
 ```
 
-| Tham số | Mặc định | Ý nghĩa |
-|---|---|---|
-| `t1`, `t2` | `2`, `8` | Số giây sau khi đóng màn hình: lần kiểm tra đầu (báo ngay nếu cycle chắc chắn) và lúc báo các trường hợp còn lại |
-| `mode` | `nil` | `.crash`, `.debugger`, `.log`. `nil`: có debugger thì dừng, không thì crash |
-| `allowedTypes` | `[]` | Type được phép sống sau khi màn hình đóng, tính cả subclass |
-| `maxSubtreeDepth` | `nil` | Số bước bên dưới màn hình được theo dõi. `nil` là không giới hạn |
-| `suppressionFile` | `LeakSuppressions.json` trong bundle chính | File liệt kê leak đã biết |
-| `instanceBudgets` | `[]` | Số instance tối đa của một type được sống cùng lúc |
-| `graph` | `LeakGraphOptions()` | Tìm retain cycle, xem [dưới](#tìm-retain-cycle) |
-| `checks` | `LeakChecks()` | Task, hook hệ thống và cảnh báo, xem [dưới](#task-hook-hệ-thống-và-cảnh-báo) |
-
-### Màn hình được phép sống lại
-
-Màn hình được cache để mở lại (mini player, tab giữ trạng thái…) sẽ bị báo leak nếu không khai báo. Có hai cách:
-
-```swift
-LeakConfiguration(allowedTypes: [MiniPlayerViewController.self])
-```
+Hoặc đánh dấu ngay trên class, tiện khi muốn ghi chú "class này được giữ có chủ đích" nằm cạnh code của nó:
 
 ```swift
 #if DEBUG
@@ -214,23 +219,27 @@ extension MiniPlayerViewController: LeakOptOut {}
 #endif
 ```
 
-Type được phép thì view, child và những gì nó giữ cũng không bị theo dõi. `LeakOptOut` không tồn tại ở Release, nên
-conformance phải bọc `#if DEBUG`.
+> Chỉ đưa vào đây màn bạn **chắc chắn giữ có chủ đích**. Đưa một màn đang leak thật vào cho đỡ bị báo thì tool sẽ
+> không bao giờ kiểm tra nó nữa, kể cả leak mới sau này. Leak thật chưa kịp sửa thì dùng [suppression file](#suppression-file).
 
 ### Instance budget
 
-Bắt leak không đi qua sự kiện đóng màn hình nào, ví dụ container tự viết quên gọi `willMove(toParent: nil)`, hoặc
-object tích luỹ qua nhiều lần mở: khai báo type X chỉ được có tối đa N instance cùng sống.
+**Dùng khi:** nghi một model bị tạo chồng nhiều lần mà tool không báo.
+
+Tool chỉ kiểm tra lúc một màn hình đóng. Có những leak không đi qua lúc đóng màn hình nào: ví dụ mỗi lần mở Profile lại
+tạo thêm một `ProfileViewModel` mà cái cũ không được giải phóng, mở 10 lần là 10 cái cùng sống. Instance budget là luật
+"type này không được có quá N instance cùng sống"; vượt là tool báo `LEAK <Type> (budget)`.
 
 ```swift
-LeakConfiguration(instanceBudgets: [
-    LeakInstanceBudget(ProfileViewController.self, max: 1),
-    LeakInstanceBudget(ProfileViewModel.self, max: 1),
-])
+#if DEBUG
+TLeakDetector.install(LeakConfiguration(
+    instanceBudgets: [LeakInstanceBudget(ProfileViewModel.self, max: 1)]
+))
+#endif
 ```
 
-- View controller được đếm tự động ở `viewDidLoad`.
-- Object khác tự đăng ký ở cuối `init` (gọi từ thread nào cũng được):
+- View controller được đếm tự động, không cần làm gì thêm.
+- Object khác (model, view model…) phải tự đăng ký ở cuối `init`, gọi từ thread nào cũng được:
 
   ```swift
   init() {
@@ -241,12 +250,14 @@ LeakConfiguration(instanceBudgets: [
   }
   ```
 
-Vượt budget thì báo `LEAK <Type> (budget)`. Subclass được tính chung vào budget của class cha.
+Subclass được tính chung vào budget của class cha.
 
 ### Suppression file
 
-Dùng khi áp dụng tool vào codebase cũ: leak đã biết chỉ được log, không dừng app, cho tới ngày hết hạn. Hết hạn thì
-leak bị báo lại như mới. Thêm file `LeakSuppressions.json` vào bundle của app:
+**Dùng khi:** áp dụng tool vào codebase cũ có sẵn leak thật mà chưa kịp sửa, không muốn app dừng ở debugger mỗi lần.
+
+Leak có trong file chỉ được ghi log, không dừng app, **cho tới ngày hết hạn**. Hết hạn thì leak bị báo lại như mới, để
+không ai quên. Thêm file `LeakSuppressions.json` vào bundle của app; tool tự đọc, không cần truyền gì vào `install()`:
 
 ```json
 {
@@ -262,11 +273,48 @@ leak bị báo lại như mới. Thêm file `LeakSuppressions.json` vào bundle 
 }
 ```
 
-- `signature.type` là tên type ở dòng `LEAK`, `signature.kind` là giá trị trong ngoặc ngay sau tên type (`screen`, `outlived`, `budget`).
+- `type` là tên type ở dòng `LEAK`, `kind` là chữ trong ngoặc ngay sau nó (`screen`, `outlived`, `budget`).
 - Thêm `"cycle": "ProfileVC.viewModel → ProfileViewModel.onChange → ProfileVC"` vào `signature` để chỉ bỏ qua đúng cycle đó.
 - `expires` dạng `yyyy-MM-dd`, còn hiệu lực hết ngày đó. `reason` và `owner` là bắt buộc.
 - Entry sai format bị bỏ qua, file sai cú pháp JSON bị bỏ qua toàn bộ. Lỗi được log ở category `config`, không crash app.
 - Chỉ đưa file vào bundle Debug: đặt `EXCLUDED_SOURCE_FILE_NAMES = LeakSuppressions.json` cho configuration Release.
+
+**`allowedTypes` hay suppression file?** Cả hai đều làm tool không dừng app, nhưng ý nghĩa ngược nhau:
+
+| | `allowedTypes` | Suppression file |
+|---|---|---|
+| Có phải leak không | **Không**: giữ lại có chủ đích | **Có**: leak thật, chưa kịp sửa |
+| Bao lâu | Vĩnh viễn | Tới ngày hết hạn, rồi báo lại |
+| Tool làm gì | Không kiểm tra | Vẫn kiểm tra, chỉ ghi log thay vì dừng app |
+| Ví dụ | Mini player được cache | Màn Profile cũ bị leak, đã có ticket sửa |
+
+### Gộp nhiều cài đặt
+
+Cần nhiều thứ cùng lúc thì truyền chung vào một lời gọi:
+
+```swift
+#if DEBUG
+TLeakDetector.install(LeakConfiguration(
+    allowedTypes: [MiniPlayerViewController.self],
+    instanceBudgets: [LeakInstanceBudget(ProfileViewModel.self, max: 1)]
+))
+#endif
+```
+
+### Toàn bộ tham số
+
+Mọi tham số đều có giá trị mặc định; chỉ truyền cái cần đổi. Những tham số ngoài ba mục trên hiếm khi cần.
+
+| Tham số | Mặc định | Ý nghĩa |
+|---|---|---|
+| `allowedTypes` | `[]` | Type được giữ lại có chủ đích, tool bỏ qua. Tính cả subclass |
+| `instanceBudgets` | `[]` | Số instance tối đa của một type được sống cùng lúc |
+| `suppressionFile` | `LeakSuppressions.json` trong bundle chính | File liệt kê leak đã biết |
+| `mode` | `nil` | `.crash`, `.debugger`, `.log`. `nil`: có debugger thì dừng, không thì crash. Thường đổi bằng `TLEAK_MODE` |
+| `t1`, `t2` | `2`, `8` | Số giây sau khi đóng màn hình: lần kiểm tra đầu (báo ngay nếu cycle chắc chắn) và lúc báo các trường hợp còn lại |
+| `maxSubtreeDepth` | `nil` | Số bước bên dưới màn hình được theo dõi. `nil` là không giới hạn |
+| `graph` | `LeakGraphOptions()` | Tìm retain cycle, xem [dưới](#tìm-retain-cycle) |
+| `checks` | `LeakChecks()` | Task, hook hệ thống và cảnh báo, xem [dưới](#task-hook-hệ-thống-và-cảnh-báo) |
 
 ### Tìm retain cycle
 
