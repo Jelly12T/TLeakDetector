@@ -260,7 +260,8 @@ struct InstanceBudgetHookTests {
                 done.resume()
             }
         }
-        // The main-queue hop was enqueued before this continuation resumed.
+        // Main-actor jobs are not ordered with main-queue blocks: wait behind the hop on the main queue itself (FIFO).
+        await withCheckedContinuation { drained in DispatchQueue.main.async { drained.resume() } }
         #expect(TLeakDetector.budgets.aliveCount(of: BudgetedModel.self) == 1)
         TLeakDetector.track(model)
         #expect(TLeakDetector.budgets.aliveCount(of: BudgetedModel.self) == 1)
