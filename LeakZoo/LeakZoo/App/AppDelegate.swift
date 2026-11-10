@@ -17,7 +17,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
     ) -> Bool {
         #if DEBUG
-        TLeakDetector.install()
+        TLeakDetector.install(LeakConfiguration(allowedTypes: [Z17CachedViewController.self]))
         #endif
         return true
     }

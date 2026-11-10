@@ -30,7 +30,11 @@ final class ScenarioListViewController: UITableViewController {
             ?? UITableViewCell(style: .subtitle, reuseIdentifier: "cell")
         cell.textLabel?.text = "\(spec.id)  \(spec.name)"
         cell.detailTextLabel?.text = "\(spec.expectation.rawValue) · \(spec.navigation.rawValue)"
-        cell.detailTextLabel?.textColor = spec.expectation == .noLeak ? .systemGreen : .systemRed
+        cell.detailTextLabel?.textColor = switch spec.expectation {
+        case .noLeak, .allowed: .systemGreen
+        case .leakSuppressed: .systemOrange
+        case .leakCycle, .leakRooted: .systemRed
+        }
         cell.accessoryType = .disclosureIndicator
         cell.accessibilityIdentifier = "zoo.row.\(spec.id)"
         return cell

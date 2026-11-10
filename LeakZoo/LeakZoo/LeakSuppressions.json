@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "suppressions": [
+    {
+      "signature": { "type": "Z19SuppressedLeakViewController", "kind": "screen" },
+      "reason": "Known cycle, kept to show suppression (LeakZoo Z19)",
+      "owner": "thachlh",
+      "expires": "2099-12-31"
+    }
+  ]
+}

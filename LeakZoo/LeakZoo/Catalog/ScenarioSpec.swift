@@ -14,6 +14,10 @@ struct ScenarioSpec: Decodable {
         case leakCycle = "leak_cycle"
         case leakRooted = "leak_rooted"
         case noLeak = "no_leak"
+        /// Outlives its screen on purpose and is configured as such: must not be reported.
+        case allowed = "allowed"
+        /// A leak listed in LeakSuppressions.json: only logged.
+        case leakSuppressed = "leak_suppressed"
     }
 
     enum Navigation: String, Decodable {

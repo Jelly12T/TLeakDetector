@@ -18,7 +18,11 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		B20000000000000000000005 /* LeakZoo */ = {isa = PBXFileSystemSynchronizedRootGroup; path = LeakZoo; sourceTree = "<group>"; };
+		B20000000000000000000005 /* LeakZoo */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = LeakZoo;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -56,7 +60,7 @@
 /* Begin PBXNativeTarget section */
 		B20000000000000000000006 /* LeakZoo */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = B20000000000000000000017;
+			buildConfigurationList = B20000000000000000000017 /* Build configuration list for PBXNativeTarget "LeakZoo" */;
 			buildPhases = (
 				B20000000000000000000007 /* Sources */,
 				B20000000000000000000008 /* Frameworks */,
@@ -87,7 +91,7 @@
 				LastSwiftUpdateCheck = 2620;
 				LastUpgradeCheck = 2620;
 			};
-			buildConfigurationList = B20000000000000000000016;
+			buildConfigurationList = B20000000000000000000016 /* Build configuration list for PBXProject "LeakZoo" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -136,15 +140,15 @@
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ENABLE_MODULES = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
-				SDKROOT = iphoneos;
-				SWIFT_VERSION = 5.0;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_TESTABILITY = YES;
 				GCC_OPTIMIZATION_LEVEL = 0;
+				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
 			};
 			name = Debug;
 		};
@@ -153,12 +157,12 @@
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ENABLE_MODULES = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
 				SDKROOT = iphoneos;
-				SWIFT_VERSION = 5.0;
-				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				SWIFT_COMPILATION_MODE = wholemodule;
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
 				VALIDATE_PRODUCT = YES;
 			};
 			name = Release;
@@ -184,6 +188,7 @@
 			buildSettings = {
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				EXCLUDED_SOURCE_FILE_NAMES = LeakSuppressions.json;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Leak Zoo";
@@ -198,7 +203,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		B20000000000000000000016 = {
+		B20000000000000000000016 /* Build configuration list for PBXProject "LeakZoo" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				B20000000000000000000018 /* Debug */,
@@ -207,7 +212,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		B20000000000000000000017 = {
+		B20000000000000000000017 /* Build configuration list for PBXNativeTarget "LeakZoo" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				B20000000000000000000020 /* Debug */,

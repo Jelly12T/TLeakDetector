@@ -265,6 +265,51 @@
           "leaks": false
         }
       ]
+    },
+    {
+      "id": "Z17",
+      "name": "Cached screen, allowlisted",
+      "expectation": "allowed",
+      "navigation": "push_pop",
+      "pattern": "VC được cache để mở lại, khai báo trong allowedTypes",
+      "retainPath": "Z17ScreenCache.screen → Z17",
+      "objects": [
+        {
+          "log": "Z17",
+          "className": "Z17CachedViewController",
+          "leaks": true
+        }
+      ]
+    },
+    {
+      "id": "Z18",
+      "name": "Kept screen, opted out",
+      "expectation": "allowed",
+      "navigation": "present_dismiss",
+      "pattern": "VC được giữ có chủ đích, conform LeakOptOut",
+      "retainPath": "Z18Keeper.screens → Z18",
+      "objects": [
+        {
+          "log": "Z18",
+          "className": "Z18OptedOutViewController",
+          "leaks": true
+        }
+      ]
+    },
+    {
+      "id": "Z19",
+      "name": "Known leak, suppressed",
+      "expectation": "leak_suppressed",
+      "navigation": "push_pop",
+      "pattern": "Cycle như Z01, có trong LeakSuppressions.json nên chỉ log",
+      "retainPath": "Z19 → onRefresh → closure → Z19",
+      "objects": [
+        {
+          "log": "Z19",
+          "className": "Z19SuppressedLeakViewController",
+          "leaks": true
+        }
+      ]
     }
   ]
 }

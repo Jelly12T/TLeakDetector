@@ -33,6 +33,10 @@ enum ScenarioFactory {
         case "Z15": return { ChildHostViewController(logTag: "Z15.host",
                                                    child: Z15PlainChildViewController(logTag: "Z15")) }
         case "Z16": return { Z16LevelViewController(level: 1) }
+        // Allowed to outlive the screen, or a known leak
+        case "Z17": return { Z17CachedViewController.cached() }
+        case "Z18": return { Z18OptedOutViewController(logTag: "Z18") }
+        case "Z19": return { Z19SuppressedLeakViewController(logTag: "Z19") }
         default: return nil
         }
     }
