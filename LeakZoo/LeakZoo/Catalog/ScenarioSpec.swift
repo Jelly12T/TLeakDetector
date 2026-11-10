@@ -18,6 +18,8 @@ struct ScenarioSpec: Decodable {
         case allowed = "allowed"
         /// A leak listed in LeakSuppressions.json: only logged.
         case leakSuppressed = "leak_suppressed"
+        /// A leak no leave event reveals: reported by the instance budget once `opens` reaches it.
+        case leakBudget = "leak_budget"
     }
 
     enum Navigation: String, Decodable {
@@ -41,6 +43,8 @@ struct ScenarioSpec: Decodable {
     let pattern: String
     let retainPath: String?
     let deinitDelaySeconds: Double?
+    /// How many times the autorun opens and closes the scenario. Default 1.
+    let opens: Int?
     let objects: [TrackedObject]
 
     static func loadAll() -> [ScenarioSpec] {

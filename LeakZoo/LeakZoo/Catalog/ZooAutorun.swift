@@ -15,9 +15,11 @@ enum ZooAutorun {
         try? await Task.sleep(nanoseconds: 1_000_000_000)
         ZooLog.log("autorun start")
         for spec in scenarios {
-            ZooLog.log("open \(spec.id)")
-            await router.runHeadless(spec)
-            try? await Task.sleep(nanoseconds: 300_000_000)
+            for _ in 0..<(spec.opens ?? 1) {
+                ZooLog.log("open \(spec.id)")
+                await router.runHeadless(spec)
+                try? await Task.sleep(nanoseconds: 300_000_000)
+            }
         }
         // Longer than the slowest delayed release (Z14, about 1 s).
         try? await Task.sleep(nanoseconds: 2_500_000_000)

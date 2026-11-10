@@ -310,6 +310,27 @@
           "leaks": true
         }
       ]
+    },
+    {
+      "id": "Z20",
+      "name": "Careless container, budget 1",
+      "expectation": "leak_budget",
+      "navigation": "add_remove_child",
+      "pattern": "Như Z04 nhưng container quên willMove(toParent: nil): không có sự kiện rời màn hình, chỉ budget bắt được",
+      "retainPath": "Z20 → onUpdate → closure → Z20",
+      "opens": 2,
+      "objects": [
+        {
+          "log": "Z20.host",
+          "className": "ChildHostViewController",
+          "leaks": false
+        },
+        {
+          "log": "Z20",
+          "className": "Z20CarelessChildViewController",
+          "leaks": true
+        }
+      ]
     }
   ]
 }

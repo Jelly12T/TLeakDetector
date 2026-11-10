@@ -37,6 +37,9 @@ enum ScenarioFactory {
         case "Z17": return { Z17CachedViewController.cached() }
         case "Z18": return { Z18OptedOutViewController(logTag: "Z18") }
         case "Z19": return { Z19SuppressedLeakViewController(logTag: "Z19") }
+        case "Z20": return { ChildHostViewController(logTag: "Z20.host",
+                                                   child: Z20CarelessChildViewController(logTag: "Z20"),
+                                                   callsWillMove: false) }
         default: return nil
         }
     }
