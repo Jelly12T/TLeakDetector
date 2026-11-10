@@ -40,6 +40,14 @@ enum ScenarioFactory {
         case "Z20": return { ChildHostViewController(logTag: "Z20.host",
                                                    child: Z20CarelessChildViewController(logTag: "Z20"),
                                                    callsWillMove: false) }
+        case "Z21": return { Z21AssociatedObjectViewController(logTag: "Z21") }
+        // Concurrency and classic patterns
+        case "Z22": return { Z22TaskOutlivesScreenViewController(logTag: "Z22") }
+        case "Z23": return { Z23DisplayLinkViewController(logTag: "Z23") }
+        case "Z24": return { Z24SessionDelegateViewController(logTag: "Z24") }
+        case "Z25": return { Z25ScriptMessageHandlerViewController(logTag: "Z25") }
+        case "Z26": return { Z26StrongDelegateNoLeakViewController(logTag: "Z26") }
+        case "Z27": return { Z27ObserverTokenViewController(logTag: "Z27") }
         default: return nil
         }
     }

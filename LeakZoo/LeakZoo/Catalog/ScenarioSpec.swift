@@ -20,6 +20,10 @@ struct ScenarioSpec: Decodable {
         case leakSuppressed = "leak_suppressed"
         /// A leak no leave event reveals: reported by the instance budget once `opens` reaches it.
         case leakBudget = "leak_budget"
+        /// The screen dies, a task it started keeps running: reported as a Task that outlived it.
+        case leakTask = "leak_task"
+        /// The screen dies, a subscription it made stays registered: reported as the outliving token.
+        case leakSubscription = "leak_subscription"
     }
 
     enum Navigation: String, Decodable {
@@ -45,6 +49,8 @@ struct ScenarioSpec: Decodable {
     let deinitDelaySeconds: Double?
     /// How many times the autorun opens and closes the scenario. Default 1.
     let opens: Int?
+    /// Warning patterns TLeakDetector must log when the screen closes, and only those.
+    let warnings: [String]?
     let objects: [TrackedObject]
 
     static func loadAll() -> [ScenarioSpec] {

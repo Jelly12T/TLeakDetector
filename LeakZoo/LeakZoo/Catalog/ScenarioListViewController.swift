@@ -33,7 +33,7 @@ final class ScenarioListViewController: UITableViewController {
         cell.detailTextLabel?.textColor = switch spec.expectation {
         case .noLeak, .allowed: .systemGreen
         case .leakSuppressed: .systemOrange
-        case .leakCycle, .leakRooted, .leakBudget: .systemRed
+        case .leakCycle, .leakRooted, .leakBudget, .leakTask, .leakSubscription: .systemRed
         }
         cell.accessoryType = .disclosureIndicator
         cell.accessibilityIdentifier = "zoo.row.\(spec.id)"

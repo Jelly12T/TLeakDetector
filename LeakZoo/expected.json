@@ -29,6 +29,9 @@
           "className": "Z02StrongDelegateViewController",
           "leaks": true
         }
+      ],
+      "warnings": [
+        "strongDelegate"
       ]
     },
     {
@@ -119,6 +122,9 @@
           "className": "Z07TimerViewController",
           "leaks": true
         }
+      ],
+      "warnings": [
+        "timerTarget"
       ]
     },
     {
@@ -134,7 +140,15 @@
           "className": "Z08NotificationObserverViewController",
           "leaks": true
         }
-      ]
+      ],
+      "warnings": [
+        "observerBlock"
+      ],
+      "causes": [
+        "cycle",
+        "held by"
+      ],
+      "note": "VC giữ token, nên vừa là cycle (VC.observer → token → block → VC) vừa bị NotificationCenter giữ"
     },
     {
       "id": "Z09",
@@ -329,6 +343,128 @@
           "log": "Z20",
           "className": "Z20CarelessChildViewController",
           "leaks": true
+        }
+      ]
+    },
+    {
+      "id": "Z21",
+      "name": "Associated object holds the screen",
+      "expectation": "leak_cycle",
+      "navigation": "push_pop",
+      "pattern": "objc_setAssociatedObject giữ helper, helper giữ lại VC: không property nào cho thấy",
+      "retainPath": "Z21 → associated helperKey → Z21Helper.owner → Z21",
+      "objects": [
+        {
+          "log": "Z21",
+          "className": "Z21AssociatedObjectViewController",
+          "leaks": true
+        }
+      ]
+    },
+    {
+      "id": "Z22",
+      "name": "Task outlives its screen",
+      "expectation": "leak_task",
+      "navigation": "push_pop",
+      "pattern": "Task với [weak self] chạy for await trên stream không bao giờ finish: màn hình chết, Task thì không",
+      "retainPath": "ZooEventBus.shared → stream → Task đang chờ (không còn giữ Z22)",
+      "objects": [
+        {
+          "log": "Z22",
+          "className": "Z22TaskOutlivesScreenViewController",
+          "leaks": false
+        }
+      ]
+    },
+    {
+      "id": "Z23",
+      "name": "CADisplayLink never invalidated",
+      "expectation": "leak_rooted",
+      "navigation": "present_dismiss",
+      "pattern": "CADisplayLink(target: self) không invalidate",
+      "retainPath": "RunLoop → CADisplayLink → target Z23",
+      "warnings": [
+        "displayLinkTarget"
+      ],
+      "causes": [
+        "held by"
+      ],
+      "objects": [
+        {
+          "log": "Z23",
+          "className": "Z23DisplayLinkViewController",
+          "leaks": true
+        }
+      ]
+    },
+    {
+      "id": "Z24",
+      "name": "URLSession delegate never invalidated",
+      "expectation": "leak_cycle",
+      "navigation": "push_pop",
+      "pattern": "URLSession(delegate: self) giữ trong property, không finishTasksAndInvalidate",
+      "retainPath": "Z24.session → URLSession.delegate → Z24",
+      "warnings": [
+        "urlSessionDelegate"
+      ],
+      "objects": [
+        {
+          "log": "Z24",
+          "className": "Z24SessionDelegateViewController",
+          "leaks": true
+        }
+      ]
+    },
+    {
+      "id": "Z25",
+      "name": "WKScriptMessageHandler never removed",
+      "expectation": "leak_cycle",
+      "navigation": "present_dismiss",
+      "pattern": "userContentController.add(self, name:) không remove",
+      "retainPath": "Z25.webView → WKUserContentController → handler Z25",
+      "warnings": [
+        "scriptMessageHandler"
+      ],
+      "objects": [
+        {
+          "log": "Z25",
+          "className": "Z25ScriptMessageHandlerViewController",
+          "leaks": true
+        }
+      ]
+    },
+    {
+      "id": "Z26",
+      "name": "Strong delegate, no cycle yet",
+      "expectation": "no_leak",
+      "navigation": "push_pop",
+      "pattern": "delegate strong nhưng trỏ vào object khác: chưa leak, vẫn phải cảnh báo",
+      "warnings": [
+        "strongDelegate"
+      ],
+      "objects": [
+        {
+          "log": "Z26",
+          "className": "Z26StrongDelegateNoLeakViewController",
+          "leaks": false
+        }
+      ]
+    },
+    {
+      "id": "Z27",
+      "name": "Observer never removed outlives its screen",
+      "expectation": "leak_subscription",
+      "navigation": "present_dismiss",
+      "pattern": "addObserver(forName:) với [weak self], không removeObserver: màn hình chết, observer vẫn đăng ký",
+      "retainPath": "NotificationCenter → observer token (Z27.observer) → block",
+      "causes": [
+        "held by"
+      ],
+      "objects": [
+        {
+          "log": "Z27",
+          "className": "Z27ObserverTokenViewController",
+          "leaks": false
         }
       ]
     }
