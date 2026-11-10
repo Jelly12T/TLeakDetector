@@ -3,8 +3,7 @@
 #
 #   package        swift build / test of the main package (Debug + Release build)
 #   release-check  TLeakDetector must never be in a Release binary (ADR 001)
-#   leakzoo        LeakZoo app still compiles (it is the grading app for the tool)
-#   spike          Field-ownership reader still matches the Swift runtime (ADR 002)
+#   appdemo        AppDemo still compiles (demo app and grading scenarios for the tool)
 
 name: CI
 
@@ -29,9 +28,9 @@ jobs:
         run: swift build
       - name: Build (Release)
         run: swift build -c release
-      - name: Test on macOS (LeakCore)
+      - name: Test on macOS
         run: swift test
-      - name: Test on iOS Simulator (LeakCore + LeakUIKit)
+      - name: Test on iOS Simulator (all targets)
         run: |
           UDID=$(xcrun simctl list devices available | grep -m1 -E '^\s+iPhone' | grep -oE '[0-9A-F-]{36}')
           echo "Simulator: $UDID"
@@ -49,26 +48,16 @@ jobs:
       - name: Debug archive must contain the tool (proves the scan works)
         run: scripts/check-release-symbols.sh --configuration Debug --expect-present
 
-  leakzoo:
-    name: LeakZoo builds
+  appdemo:
+    name: AppDemo builds
     runs-on: macos-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - run: xcodebuild -version
-      - name: Build LeakZoo for the simulator
+      - name: Build AppDemo for the simulator
         run: |
           xcodebuild build \
-            -project LeakZoo/LeakZoo.xcodeproj -scheme LeakZoo -configuration Debug \
+            -project AppDemo/AppDemo.xcodeproj -scheme AppDemo -configuration Debug \
             -destination 'generic/platform=iOS Simulator' \
             CODE_SIGNING_ALLOWED=NO
-
-  spike:
-    name: Field-ownership spike
-    runs-on: macos-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-      - name: Reader matches the Swift runtime on every sample field
-        working-directory: Spikes/FieldOwnership
-        run: swift test --filter testExpectations

@@ -1,0 +1,1619 @@
+{
+  "version": 1,
+  "scenarios": [
+    {
+      "id": "L01",
+      "name": "Block property captures self",
+      "family": "Objective-C screens",
+      "language": "objc",
+      "expectation": "leak_cycle",
+      "navigation": "push_pop",
+      "pattern": "@property (copy) block gán ^{ [self reload]; }",
+      "retainPath": "L01 → _onRefresh → block → L01",
+      "cause": [
+        "cycle"
+      ],
+      "objects": [
+        {
+          "log": "L01",
+          "className": "LL01BlockPropertyViewController",
+          "leaks": true,
+          "kind": "screen"
+        }
+      ]
+    },
+    {
+      "id": "L02",
+      "name": "Strong delegate property",
+      "family": "Objective-C screens",
+      "language": "objc",
+      "expectation": "leak_cycle",
+      "navigation": "present_dismiss",
+      "pattern": "Worker có @property (strong) id<Delegate> delegate = VC",
+      "retainPath": "L02 → _worker → _delegate → L02",
+      "cause": [
+        "cycle"
+      ],
+      "warnings": [
+        "strongDelegate"
+      ],
+      "objects": [
+        {
+          "log": "L02",
+          "className": "LL02StrongDelegateViewController",
+          "leaks": true,
+          "kind": "screen"
+        },
+        {
+          "log": "L02.worker",
+          "className": "LL02Worker",
+          "leaks": true
+        }
+      ]
+    },
+    {
+      "id": "L03",
+      "name": "Weak delegate property",
+      "family": "Objective-C screens",
+      "language": "objc",
+      "expectation": "no_leak",
+      "navigation": "push_pop",
+      "pattern": "Như L02 nhưng delegate weak",
+      "objects": [
+        {
+          "log": "L03",
+          "className": "LL03WeakDelegateViewController",
+          "leaks": false
+        },
+        {
+          "log": "L03.worker",
+          "className": "LL03Worker",
+          "leaks": false
+        }
+      ]
+    },
+    {
+      "id": "L04",
+      "name": "NSTimer target self",
+      "family": "Objective-C screens",
+      "language": "objc",
+      "expectation": "leak_rooted",
+      "navigation": "push_pop",
+      "pattern": "scheduledTimerWithTimeInterval:target:self repeats:YES, property timer weak, không invalidate",
+      "retainPath": "RunLoop → NSTimer → target → L04",
+      "cause": [
+        "held by Timer"
+      ],
+      "warnings": [
+        "timerTarget"
+      ],
+      "objects": [
+        {
+          "log": "L04",
+          "className": "LL04TimerTargetViewController",
+          "leaks": true,
+          "kind": "screen"
+        }
+      ]
+    },
+    {
+      "id": "L05",
+      "name": "NSTimer through weak proxy",
+      "family": "Objective-C screens",
+      "language": "objc",
+      "expectation": "no_leak",
+      "navigation": "push_pop",
+      "pattern": "Timer target là LLWeakProxy, invalidate trong dealloc",
+      "objects": [
+        {
+          "log": "L05",
+          "className": "LL05WeakProxyTimerViewController",
+          "leaks": false
+        }
+      ]
+    },
+    {
+      "id": "L06",
+      "name": "Notification block observer captures self",
+      "family": "Objective-C screens",
+      "language": "objc",
+      "expectation": "leak_cycle",
+      "navigation": "present_dismiss",
+      "pattern": "addObserverForName:usingBlock: bắt self, token lưu ở property strong, không remove",
+      "retainPath": "L06 → _observer → block → L06; NotificationCenter → token",
+      "cause": [
+        "cycle",
+        "held by"
+      ],
+      "warnings": [
+        "observerBlock"
+      ],
+      "objects": [
+        {
+          "log": "L06",
+          "className": "LL06ObserverBlockViewController",
+          "leaks": true,
+          "kind": "screen"
+        }
+      ]
+    },
+    {
+      "id": "L07",
+      "name": "Notification observer weakSelf, removed",
+      "family": "Objective-C screens",
+      "language": "objc",
+      "expectation": "no_leak",
+      "navigation": "present_dismiss",
+      "pattern": "weakSelf trong block, removeObserver trong dealloc",
+      "objects": [
+        {
+          "log": "L07",
+          "className": "LL07ObserverRemovedViewController",
+          "leaks": false
+        }
+      ]
+    },
+    {
+      "id": "L08",
+      "name": "Notification observer weakSelf, never removed",
+      "family": "Objective-C screens",
+      "language": "objc",
+      "expectation": "leak_subscription",
+      "navigation": "push_pop",
+      "pattern": "weakSelf trong block, token ở ivar, không remove: màn hình chết, observer còn đăng ký",
+      "retainPath": "NotificationCenter → token (__NSObserver) → block",
+      "cause": [
+        "held by NotificationCenter observer"
+      ],
+      "objects": [
+        {
+          "log": "L08",
+          "className": "LL08ObserverNotRemovedViewController",
+          "leaks": false
+        }
+      ]
+    },
+    {
+      "id": "L09",
+      "name": "KVO observer never removed",
+      "family": "Objective-C screens",
+      "language": "objc",
+      "expectation": "no_leak",
+      "navigation": "push_pop",
+      "pattern": "addObserver:forKeyPath: trên singleton, không removeObserver. KVO không retain observer",
+      "note": "Không leak, nhưng singleton còn giữ đăng ký trỏ tới observer đã chết (crash nếu theme đổi). Tool không có pattern cho KVO",
+      "objects": [
+        {
+          "log": "L09",
+          "className": "LL09KVONotRemovedViewController",
+          "leaks": false
+        }
+      ]
+    },
+    {
+      "id": "L10",
+      "name": "dispatch_after 4 s captures self",
+      "family": "Objective-C screens",
+      "language": "objc",
+      "expectation": "no_leak",
+      "navigation": "push_pop",
+      "pattern": "dispatch_after 4 giây bắt self trong viewDidDisappear: deinit trễ, trước T2",
+      "deinitDelaySeconds": 4,
+      "objects": [
+        {
+          "log": "L10",
+          "className": "LL10DispatchAfterViewController",
+          "leaks": false
+        }
+      ]
+    },
+    {
+      "id": "L11",
+      "name": "dispatch_after 15 s captures self",
+      "family": "Objective-C screens",
+      "language": "objc",
+      "expectation": "no_leak",
+      "navigation": "push_pop",
+      "pattern": "dispatch_after 15 giây bắt self: deinit trễ, sau T2 (8 s)",
+      "deinitDelaySeconds": 15,
+      "objects": [
+        {
+          "log": "L11",
+          "className": "LL11LongDispatchAfterViewController",
+          "leaks": false
+        }
+      ]
+    },
+    {
+      "id": "L12",
+      "name": "weakSelf/strongSelf dance",
+      "family": "Objective-C screens",
+      "language": "objc",
+      "expectation": "no_leak",
+      "navigation": "present_dismiss",
+      "pattern": "Block property dùng __weak weakSelf rồi __strong strongSelf",
+      "objects": [
+        {
+          "log": "L12",
+          "className": "LL12WeakStrongDanceViewController",
+          "leaks": false
+        }
+      ]
+    },
+    {
+      "id": "L13",
+      "name": "Known ObjC leak, suppressed",
+      "family": "Objective-C screens",
+      "language": "objc",
+      "expectation": "leak_suppressed",
+      "navigation": "push_pop",
+      "pattern": "Như L01, có trong LeakSuppressions.json nên chỉ log",
+      "retainPath": "L13 → _onRefresh → block → L13",
+      "cause": [
+        "cycle"
+      ],
+      "objects": [
+        {
+          "log": "L13",
+          "className": "LL13SuppressedLegacyViewController",
+          "leaks": true,
+          "kind": "screen"
+        }
+      ]
+    },
+    {
+      "id": "L14",
+      "name": "ObjC VC ↔ Swift view model closure",
+      "family": "Cross-language cycles",
+      "language": "mixed",
+      "expectation": "leak_cycle",
+      "navigation": "push_pop",
+      "pattern": "VC ObjC giữ view model Swift; onChange (closure Swift) được gán block ObjC bắt self",
+      "retainPath": "L14 → _viewModel → onChange → block → L14",
+      "cause": [
+        "cycle"
+      ],
+      "objects": [
+        {
+          "log": "L14",
+          "className": "LL14ProfileViewController",
+          "leaks": true,
+          "kind": "screen"
+        },
+        {
+          "log": "L14.viewModel",
+          "className": "L14ProfileViewModel",
+          "leaks": true
+        }
+      ]
+    },
+    {
+      "id": "L15",
+      "name": "Swift VC ↔ ObjC block property",
+      "family": "Cross-language cycles",
+      "language": "mixed",
+      "expectation": "leak_cycle",
+      "navigation": "present_dismiss",
+      "pattern": "VC Swift giữ downloader ObjC; completion (block) được gán closure Swift bắt self",
+      "retainPath": "L15 → downloader → _completion → closure → L15",
+      "cause": [
+        "cycle"
+      ],
+      "objects": [
+        {
+          "log": "L15",
+          "className": "L15DownloadViewController",
+          "leaks": true,
+          "kind": "screen"
+        },
+        {
+          "log": "L15.downloader",
+          "className": "LL15Downloader",
+          "leaks": true
+        }
+      ]
+    },
+    {
+      "id": "L16",
+      "name": "Swift VC ↔ ObjC strong delegate",
+      "family": "Cross-language cycles",
+      "language": "mixed",
+      "expectation": "leak_cycle",
+      "navigation": "push_pop",
+      "pattern": "VC Swift giữ uploader ObjC có @property (strong) delegate = VC",
+      "retainPath": "L16 → uploader → _delegate → L16",
+      "cause": [
+        "cycle"
+      ],
+      "warnings": [
+        "strongDelegate"
+      ],
+      "objects": [
+        {
+          "log": "L16",
+          "className": "L16UploadViewController",
+          "leaks": true,
+          "kind": "screen"
+        },
+        {
+          "log": "L16.uploader",
+          "className": "LL16Uploader",
+          "leaks": true
+        }
+      ]
+    },
+    {
+      "id": "L17",
+      "name": "ObjC VC ↔ Swift strong delegate",
+      "family": "Cross-language cycles",
+      "language": "mixed",
+      "expectation": "leak_cycle",
+      "navigation": "push_pop",
+      "pattern": "VC ObjC giữ syncer Swift có `var delegate` strong = VC",
+      "retainPath": "L17 → _syncer → delegate → L17",
+      "cause": [
+        "cycle"
+      ],
+      "warnings": [
+        "strongDelegate"
+      ],
+      "objects": [
+        {
+          "log": "L17",
+          "className": "LL17SyncViewController",
+          "leaks": true,
+          "kind": "screen"
+        },
+        {
+          "log": "L17.syncer",
+          "className": "L17Syncer",
+          "leaks": true
+        }
+      ]
+    },
+    {
+      "id": "L18",
+      "name": "Swift VC ↔ ObjC block, weak self",
+      "family": "Cross-language cycles",
+      "language": "mixed",
+      "expectation": "no_leak",
+      "navigation": "push_pop",
+      "pattern": "Như L15 nhưng [weak self]",
+      "objects": [
+        {
+          "log": "L18",
+          "className": "L18ThumbnailViewController",
+          "leaks": false
+        },
+        {
+          "log": "L18.fetcher",
+          "className": "LL18ThumbnailFetcher",
+          "leaks": false
+        }
+      ]
+    },
+    {
+      "id": "L19",
+      "name": "ObjC VC ↔ Swift closure, weakSelf",
+      "family": "Cross-language cycles",
+      "language": "mixed",
+      "expectation": "no_leak",
+      "navigation": "present_dismiss",
+      "pattern": "Như L14 nhưng weakSelf",
+      "objects": [
+        {
+          "log": "L19",
+          "className": "LL19SettingsViewController",
+          "leaks": false
+        },
+        {
+          "log": "L19.viewModel",
+          "className": "L19SettingsViewModel",
+          "leaks": false
+        }
+      ]
+    },
+    {
+      "id": "L20",
+      "name": "NSKeyValueObservation captures self",
+      "family": "Swift screens",
+      "language": "swift",
+      "expectation": "leak_cycle",
+      "navigation": "push_pop",
+      "pattern": "observe(\\.volume) { self… } lưu ở property của self",
+      "retainPath": "L20 → observation → closure → L20",
+      "cause": [
+        "cycle"
+      ],
+      "objects": [
+        {
+          "log": "L20",
+          "className": "L20KVOObservationViewController",
+          "leaks": true,
+          "kind": "screen"
+        }
+      ]
+    },
+    {
+      "id": "L21",
+      "name": "lazy var closure captures self",
+      "family": "Swift screens",
+      "language": "swift",
+      "expectation": "leak_cycle",
+      "navigation": "present_dismiss",
+      "pattern": "lazy var headline: () -> String = { self… }",
+      "retainPath": "L21 → headline (lazy storage) → closure → L21",
+      "cause": [
+        "cycle"
+      ],
+      "objects": [
+        {
+          "log": "L21",
+          "className": "L21LazyClosureViewController",
+          "leaks": true,
+          "kind": "screen"
+        }
+      ]
+    },
+    {
+      "id": "L22",
+      "name": "[weak self] only in inner closure",
+      "family": "Swift screens",
+      "language": "swift",
+      "expectation": "leak_cycle",
+      "navigation": "push_pop",
+      "pattern": "Closure ngoài lưu ở property, chỉ closure trong có [weak self]: closure ngoài bắt self mạnh",
+      "retainPath": "L22 → onTap → closure → L22",
+      "cause": [
+        "cycle"
+      ],
+      "objects": [
+        {
+          "log": "L22",
+          "className": "L22NestedWeakViewController",
+          "leaks": true,
+          "kind": "screen"
+        }
+      ]
+    },
+    {
+      "id": "L23",
+      "name": "Method reference as closure",
+      "family": "Swift screens",
+      "language": "swift",
+      "expectation": "leak_cycle",
+      "navigation": "push_pop",
+      "pattern": "viewModel.onEvent = handle (method reference bắt self)",
+      "retainPath": "L23 → viewModel → onEvent → L23",
+      "cause": [
+        "cycle"
+      ],
+      "objects": [
+        {
+          "log": "L23",
+          "className": "L23MethodReferenceViewController",
+          "leaks": true,
+          "kind": "screen"
+        },
+        {
+          "log": "L23.viewModel",
+          "className": "L23ViewModel",
+          "leaks": true
+        }
+      ]
+    },
+    {
+      "id": "L24",
+      "name": "Child VC holds parent strongly",
+      "family": "Swift screens",
+      "language": "swift",
+      "expectation": "leak_cycle",
+      "navigation": "push_pop",
+      "pattern": "Child có `var parentScreen` strong trỏ về parent",
+      "retainPath": "L24 → children[0] → parentScreen → L24",
+      "cause": [
+        "cycle"
+      ],
+      "objects": [
+        {
+          "log": "L24",
+          "className": "L24ParentViewController",
+          "leaks": true,
+          "kind": "screen"
+        },
+        {
+          "log": "L24.child",
+          "className": "L24ChildViewController",
+          "leaks": true
+        }
+      ]
+    },
+    {
+      "id": "L25",
+      "name": "Combine assign(to:on: self)",
+      "family": "Swift screens",
+      "language": "swift",
+      "expectation": "leak_cycle",
+      "navigation": "present_dismiss",
+      "pattern": "assign(to: \\.headline, on: self) lưu vào cancellables của self",
+      "retainPath": "L25 → cancellables → Subscribers.Assign → L25",
+      "cause": [
+        "cycle"
+      ],
+      "objects": [
+        {
+          "log": "L25",
+          "className": "L25CombineAssignViewController",
+          "leaks": true,
+          "kind": "screen"
+        }
+      ]
+    },
+    {
+      "id": "L26",
+      "name": "Task.detached polling captures self",
+      "family": "Swift screens",
+      "language": "swift",
+      "expectation": "leak_rooted",
+      "navigation": "push_pop",
+      "pattern": "Task.detached lặp vô hạn, bắt self mạnh, không cancel",
+      "retainPath": "Task (detached) → L26",
+      "cause": [
+        "held by Task"
+      ],
+      "objects": [
+        {
+          "log": "L26",
+          "className": "L26DetachedPollingViewController",
+          "leaks": true,
+          "kind": "screen"
+        }
+      ]
+    },
+    {
+      "id": "L27",
+      "name": "Closure with [unowned self]",
+      "family": "Swift screens",
+      "language": "swift",
+      "expectation": "no_leak",
+      "navigation": "push_pop",
+      "pattern": "Closure lưu ở property, [unowned self]",
+      "objects": [
+        {
+          "log": "L27",
+          "className": "L27UnownedClosureViewController",
+          "leaks": false
+        }
+      ]
+    },
+    {
+      "id": "L28",
+      "name": "Stored UIAlertController action captures self",
+      "family": "Swift screens",
+      "language": "swift",
+      "expectation": "leak_cycle",
+      "navigation": "push_pop",
+      "pattern": "Alert dựng sẵn lưu ở property, handler của UIAlertAction bắt self",
+      "retainPath": "L28 → deleteAlert → actions → handler → L28",
+      "cause": [
+        "cycle"
+      ],
+      "objects": [
+        {
+          "log": "L28",
+          "className": "L28AlertActionViewController",
+          "leaks": true,
+          "kind": "screen"
+        }
+      ]
+    },
+    {
+      "id": "L29",
+      "name": "Swift view model kept by Swift singleton",
+      "family": "Objects owned by a screen",
+      "language": "swift",
+      "expectation": "leak_rooted",
+      "navigation": "push_pop",
+      "pattern": "View model của màn hình được đăng ký vào L29Hub.shared (mảng strong), không bao giờ gỡ",
+      "retainPath": "L29Hub.shared → listeners → viewModel",
+      "cause": [
+        "held by singleton"
+      ],
+      "objects": [
+        {
+          "log": "L29",
+          "className": "L29FeedViewController",
+          "leaks": false
+        },
+        {
+          "log": "L29.viewModel",
+          "className": "L29FeedViewModel",
+          "leaks": true,
+          "kind": "outlived"
+        }
+      ]
+    },
+    {
+      "id": "L30",
+      "name": "ObjC session kept by ObjC singleton",
+      "family": "Objects owned by a screen",
+      "language": "mixed",
+      "expectation": "leak_rooted",
+      "navigation": "present_dismiss",
+      "pattern": "VC Swift giữ session ObjC, session được thêm vào LL30SessionRegistry (+sharedInstance)",
+      "retainPath": "LL30SessionRegistry.sharedInstance → _sessions → session",
+      "cause": [
+        "held by singleton"
+      ],
+      "objects": [
+        {
+          "log": "L30",
+          "className": "L30CheckoutViewController",
+          "leaks": false
+        },
+        {
+          "log": "L30.session",
+          "className": "LL30AnalyticsSession",
+          "leaks": true,
+          "kind": "outlived"
+        }
+      ]
+    },
+    {
+      "id": "L31",
+      "name": "ObjC VC's Swift view model kept by Swift singleton",
+      "family": "Objects owned by a screen",
+      "language": "mixed",
+      "expectation": "leak_rooted",
+      "navigation": "push_pop",
+      "pattern": "VC ObjC giữ view model Swift, view model được attach vào L31CartStore.shared",
+      "retainPath": "L31CartStore.shared → attached → viewModel",
+      "cause": [
+        "held by singleton"
+      ],
+      "objects": [
+        {
+          "log": "L31",
+          "className": "LL31CartViewController",
+          "leaks": false
+        },
+        {
+          "log": "L31.viewModel",
+          "className": "L31CartViewModel",
+          "leaks": true,
+          "kind": "outlived"
+        }
+      ]
+    },
+    {
+      "id": "L32",
+      "name": "ObjC VC's ObjC object kept by file static",
+      "family": "Objects owned by a screen",
+      "language": "objc",
+      "expectation": "leak_rooted",
+      "navigation": "push_pop",
+      "pattern": "VC ObjC giữ draftStore, draftStore được thêm vào static NSMutableArray ở file scope",
+      "retainPath": "static LL32PendingDrafts → draftStore",
+      "cause": [
+        "held by static"
+      ],
+      "objects": [
+        {
+          "log": "L32",
+          "className": "LL32ComposeViewController",
+          "leaks": false
+        },
+        {
+          "log": "L32.draftStore",
+          "className": "LL32DraftStore",
+          "leaks": true,
+          "kind": "outlived"
+        }
+      ]
+    },
+    {
+      "id": "L33",
+      "name": "Swift plain-object cycle owned by Swift VC",
+      "family": "Objects owned by a screen",
+      "language": "swift",
+      "expectation": "leak_cycle",
+      "navigation": "push_pop",
+      "pattern": "Store ⇄ Reducer giữ nhau strong; màn hình chết, cặp object sống mãi",
+      "retainPath": "L33Store → reducer → store → L33Store",
+      "cause": [
+        "cycle"
+      ],
+      "objects": [
+        {
+          "log": "L33",
+          "className": "L33SearchViewController",
+          "leaks": false
+        },
+        {
+          "log": "L33.store",
+          "className": "L33Store",
+          "leaks": true,
+          "kind": "outlived"
+        },
+        {
+          "log": "L33.reducer",
+          "className": "L33Reducer",
+          "leaks": true
+        }
+      ]
+    },
+    {
+      "id": "L34",
+      "name": "ObjC plain-object cycle owned by Swift VC",
+      "family": "Objects owned by a screen",
+      "language": "mixed",
+      "expectation": "leak_cycle",
+      "navigation": "push_pop",
+      "pattern": "Cây node ObjC với `parent` strong: root ⇄ leaf",
+      "retainPath": "LL34Node → _children → leaf → _parent → LL34Node",
+      "cause": [
+        "cycle"
+      ],
+      "objects": [
+        {
+          "log": "L34",
+          "className": "L34OutlineViewController",
+          "leaks": false
+        },
+        {
+          "log": "L34.root",
+          "className": "LL34Node",
+          "leaks": true,
+          "kind": "outlived"
+        },
+        {
+          "log": "L34.leaf",
+          "className": "LL34Node",
+          "leaks": true
+        }
+      ]
+    },
+    {
+      "id": "L35",
+      "name": "ObjC plain-object cycle owned by ObjC VC",
+      "family": "Objects owned by a screen",
+      "language": "objc",
+      "expectation": "leak_cycle",
+      "navigation": "push_pop",
+      "pattern": "Document ⇄ DocumentController strong, màn hình ObjC giữ document",
+      "retainPath": "LL35Document → _controller → _document → LL35Document",
+      "cause": [
+        "cycle"
+      ],
+      "objects": [
+        {
+          "log": "L35",
+          "className": "LL35EditorViewController",
+          "leaks": false
+        },
+        {
+          "log": "L35.document",
+          "className": "LL35Document",
+          "leaks": true,
+          "kind": "outlived"
+        },
+        {
+          "log": "L35.controller",
+          "className": "LL35DocumentController",
+          "leaks": true
+        }
+      ]
+    },
+    {
+      "id": "L36",
+      "name": "ObjC tree with weak back pointer",
+      "family": "Objects owned by a screen",
+      "language": "mixed",
+      "expectation": "no_leak",
+      "navigation": "push_pop",
+      "pattern": "Folder → files strong, file → folder weak",
+      "objects": [
+        {
+          "log": "L36",
+          "className": "L36FolderViewController",
+          "leaks": false
+        },
+        {
+          "log": "L36.folder",
+          "className": "LL36Folder",
+          "leaks": false
+        },
+        {
+          "log": "L36.file",
+          "className": "LL36File",
+          "leaks": false
+        }
+      ]
+    },
+    {
+      "id": "L37",
+      "name": "Tracked Swift object, cache never evicts, budget 1",
+      "family": "Objects owned by a screen",
+      "language": "swift",
+      "expectation": "leak_budget",
+      "navigation": "push_pop",
+      "pattern": "Mỗi lần mở, một thumbnail (track(self)) được đưa vào cache singleton không bao giờ xoá. Màn hình không giữ nó",
+      "retainPath": "L37ThumbnailCache.shared → thumbnails",
+      "opens": 2,
+      "objects": [
+        {
+          "log": "L37",
+          "className": "L37GalleryViewController",
+          "leaks": false
+        },
+        {
+          "log": "L37.thumbnail",
+          "className": "L37Thumbnail",
+          "leaks": true,
+          "kind": "budget"
+        }
+      ]
+    },
+    {
+      "id": "L38",
+      "name": "Tracked ObjC object with self cycle, budget 1",
+      "family": "Objects owned by a screen",
+      "language": "objc",
+      "expectation": "leak_budget",
+      "navigation": "push_pop",
+      "pattern": "Token ObjC tự giữ mình qua block, track từ ObjC qua LabLeakTracking; màn hình chỉ tạo rồi bỏ",
+      "retainPath": "LL38SessionToken → _onExpire → block → LL38SessionToken",
+      "opens": 2,
+      "objects": [
+        {
+          "log": "L38",
+          "className": "LL38LoginViewController",
+          "leaks": false
+        },
+        {
+          "log": "L38.token",
+          "className": "LL38SessionToken",
+          "leaks": true,
+          "kind": "budget"
+        }
+      ]
+    },
+    {
+      "id": "L39",
+      "name": "Tracked object released, budget 1",
+      "family": "Objects owned by a screen",
+      "language": "swift",
+      "expectation": "no_leak",
+      "navigation": "push_pop",
+      "pattern": "Object track(self) do màn hình sở hữu, chết cùng màn hình; mở 2 lần",
+      "opens": 2,
+      "objects": [
+        {
+          "log": "L39",
+          "className": "L39PreviewViewController",
+          "leaks": false
+        },
+        {
+          "log": "L39.preview",
+          "className": "L39Preview",
+          "leaks": false
+        }
+      ]
+    },
+    {
+      "id": "L40",
+      "name": "ObjC child in careless container, budget 1",
+      "family": "Objects owned by a screen",
+      "language": "mixed",
+      "expectation": "leak_budget",
+      "navigation": "add_remove_child",
+      "pattern": "Child ObjC có block cycle, container quên willMove(toParent: nil): chỉ budget bắt được",
+      "retainPath": "L40 → _onUpdate → block → L40",
+      "opens": 2,
+      "objects": [
+        {
+          "log": "L40.host",
+          "className": "ChildHostViewController",
+          "leaks": false
+        },
+        {
+          "log": "L40",
+          "className": "LL40CarelessChildViewController",
+          "leaks": true,
+          "kind": "budget"
+        }
+      ]
+    },
+    {
+      "id": "L41",
+      "name": "Swift static dictionary holds screen",
+      "family": "Statics",
+      "language": "swift",
+      "expectation": "leak_rooted",
+      "navigation": "push_pop",
+      "pattern": "static var byRoute: [String: UIViewController]",
+      "retainPath": "L41ScreenCache.byRoute → L41",
+      "cause": [
+        "held by static"
+      ],
+      "objects": [
+        {
+          "log": "L41",
+          "className": "L41RouteCachedViewController",
+          "leaks": true,
+          "kind": "screen"
+        }
+      ]
+    },
+    {
+      "id": "L42",
+      "name": "Swift static array of closures captures screen",
+      "family": "Statics",
+      "language": "swift",
+      "expectation": "leak_rooted",
+      "navigation": "present_dismiss",
+      "pattern": "static var actions: [() -> Void], closure bắt self",
+      "retainPath": "L42PendingActions.actions → closure → L42",
+      "cause": [
+        "held by static"
+      ],
+      "objects": [
+        {
+          "log": "L42",
+          "className": "L42DeferredActionViewController",
+          "leaks": true,
+          "kind": "screen"
+        }
+      ]
+    },
+    {
+      "id": "L43",
+      "name": "ObjC file-level static NSMutableArray",
+      "family": "Statics",
+      "language": "objc",
+      "expectation": "leak_rooted",
+      "navigation": "push_pop",
+      "pattern": "static NSMutableArray *LL43RecentScreens ở file scope",
+      "retainPath": "LL43RecentScreens → L43",
+      "cause": [
+        "held by static"
+      ],
+      "objects": [
+        {
+          "log": "L43",
+          "className": "LL43HistoryViewController",
+          "leaks": true,
+          "kind": "screen"
+        }
+      ]
+    },
+    {
+      "id": "L44",
+      "name": "ObjC function-local static holds Swift screen",
+      "family": "Statics",
+      "language": "mixed",
+      "expectation": "leak_rooted",
+      "navigation": "push_pop",
+      "pattern": "static NSMutableDictionary trong hàm C LL44RememberScreen, gọi từ VC Swift",
+      "retainPath": "LL44RememberScreen.screensByName → L44",
+      "cause": [
+        "held by static"
+      ],
+      "objects": [
+        {
+          "log": "L44",
+          "className": "L44ReceiptViewController",
+          "leaks": true,
+          "kind": "screen"
+        }
+      ]
+    },
+    {
+      "id": "L45",
+      "name": "ObjC class property backed by static",
+      "family": "Statics",
+      "language": "objc",
+      "expectation": "leak_rooted",
+      "navigation": "present_dismiss",
+      "pattern": "@property (class) lastScreen, lưu ở static UIViewController *",
+      "retainPath": "LL45LastScreen → L45",
+      "cause": [
+        "held by static"
+      ],
+      "objects": [
+        {
+          "log": "L45",
+          "className": "LL45CheckoutViewController",
+          "leaks": true,
+          "kind": "screen"
+        }
+      ]
+    },
+    {
+      "id": "L46",
+      "name": "Swift static array of weak boxes",
+      "family": "Statics",
+      "language": "swift",
+      "expectation": "no_leak",
+      "navigation": "push_pop",
+      "pattern": "static var boxes: [WeakBox] (weak var screen)",
+      "objects": [
+        {
+          "log": "L46",
+          "className": "L46WeakStaticViewController",
+          "leaks": false
+        }
+      ]
+    },
+    {
+      "id": "L47",
+      "name": "Swift singleton holds ObjC screen",
+      "family": "Singletons",
+      "language": "mixed",
+      "expectation": "leak_rooted",
+      "navigation": "push_pop",
+      "pattern": "L47Session.shared.activeScreen = self (từ VC ObjC)",
+      "retainPath": "L47Session.shared → activeScreen → L47",
+      "cause": [
+        "held by singleton"
+      ],
+      "objects": [
+        {
+          "log": "L47",
+          "className": "LL47DashboardViewController",
+          "leaks": true,
+          "kind": "screen"
+        }
+      ]
+    },
+    {
+      "id": "L48",
+      "name": "ObjC sharedInstance holds Swift screen",
+      "family": "Singletons",
+      "language": "mixed",
+      "expectation": "leak_rooted",
+      "navigation": "push_pop",
+      "pattern": "+sharedInstance (dispatch_once) với @property (strong) currentScreen = self (từ VC Swift)",
+      "retainPath": "LL48ScreenTracker.sharedInstance → _currentScreen → L48",
+      "cause": [
+        "held by singleton"
+      ],
+      "objects": [
+        {
+          "log": "L48",
+          "className": "L48OrdersViewController",
+          "leaks": true,
+          "kind": "screen"
+        }
+      ]
+    },
+    {
+      "id": "L49",
+      "name": "Network client singleton keeps completion",
+      "family": "Singletons",
+      "language": "swift",
+      "expectation": "leak_rooted",
+      "navigation": "push_pop",
+      "pattern": "Completion handler bắt self lưu trong pending của client singleton; request không bao giờ xong",
+      "retainPath": "L49NetworkClient.shared → pending → closure → L49",
+      "cause": [
+        "held by singleton"
+      ],
+      "objects": [
+        {
+          "log": "L49",
+          "className": "L49OrderHistoryViewController",
+          "leaks": true,
+          "kind": "screen"
+        }
+      ]
+    },
+    {
+      "id": "L50",
+      "name": "ObjC image loader singleton keeps callback block",
+      "family": "Singletons",
+      "language": "objc",
+      "expectation": "leak_rooted",
+      "navigation": "present_dismiss",
+      "pattern": "Block completion bắt self lưu trong NSMutableDictionary của loader +sharedInstance",
+      "retainPath": "LL50ImageLoader.sharedInstance → _pending → block → L50",
+      "cause": [
+        "held by singleton"
+      ],
+      "objects": [
+        {
+          "log": "L50",
+          "className": "LL50AvatarViewController",
+          "leaks": true,
+          "kind": "screen"
+        }
+      ]
+    },
+    {
+      "id": "L51",
+      "name": "Event bus subscription never removed (Swift)",
+      "family": "Singletons",
+      "language": "swift",
+      "expectation": "leak_rooted",
+      "navigation": "push_pop",
+      "pattern": "subscribe(self) vào mảng strong của bus singleton, không unsubscribe",
+      "retainPath": "L51EventBus.shared → subscribers → L51",
+      "cause": [
+        "held by singleton"
+      ],
+      "objects": [
+        {
+          "log": "L51",
+          "className": "L51NotificationsViewController",
+          "leaks": true,
+          "kind": "screen"
+        }
+      ]
+    },
+    {
+      "id": "L52",
+      "name": "ObjC listener center, strong array",
+      "family": "Singletons",
+      "language": "objc",
+      "expectation": "leak_rooted",
+      "navigation": "push_pop",
+      "pattern": "addListener:self vào NSMutableArray của singleton, không remove",
+      "retainPath": "LL52ListenerCenter.sharedInstance → _listeners → L52",
+      "cause": [
+        "held by singleton"
+      ],
+      "objects": [
+        {
+          "log": "L52",
+          "className": "LL52InboxViewController",
+          "leaks": true,
+          "kind": "screen"
+        }
+      ]
+    },
+    {
+      "id": "L53",
+      "name": "ObjC listener center, NSHashTable weak",
+      "family": "Singletons",
+      "language": "objc",
+      "expectation": "no_leak",
+      "navigation": "push_pop",
+      "pattern": "Như L52 với [NSHashTable weakObjectsHashTable]",
+      "objects": [
+        {
+          "log": "L53",
+          "className": "LL53WeakInboxViewController",
+          "leaks": false
+        }
+      ]
+    },
+    {
+      "id": "L54",
+      "name": "Swift event bus, weak wrappers",
+      "family": "Singletons",
+      "language": "swift",
+      "expectation": "no_leak",
+      "navigation": "push_pop",
+      "pattern": "Như L51 với struct weak wrapper",
+      "objects": [
+        {
+          "log": "L54",
+          "className": "L54WeakNotificationsViewController",
+          "leaks": false
+        }
+      ]
+    },
+    {
+      "id": "L55",
+      "name": "ObjC screen cached on purpose, allowedTypes",
+      "family": "Singletons",
+      "language": "objc",
+      "expectation": "allowed",
+      "navigation": "push_pop",
+      "pattern": "VC ObjC giữ trong static để mở lại, khai báo trong allowedTypes",
+      "retainPath": "static cached → L55",
+      "objects": [
+        {
+          "log": "L55",
+          "className": "LL55CachedGalleryViewController",
+          "leaks": true
+        }
+      ]
+    },
+    {
+      "id": "L56",
+      "name": "ObjC screen kept on purpose, LeakOptOut in Swift",
+      "family": "Singletons",
+      "language": "mixed",
+      "expectation": "allowed",
+      "navigation": "present_dismiss",
+      "pattern": "VC ObjC được L56MiniPlayerKeeper.shared giữ, conform LeakOptOut bằng extension Swift",
+      "retainPath": "L56MiniPlayerKeeper.shared → screens → L56",
+      "objects": [
+        {
+          "log": "L56",
+          "className": "LL56RetainedPlayerViewController",
+          "leaks": true
+        }
+      ]
+    },
+    {
+      "id": "L57",
+      "name": "Screen references a shared singleton",
+      "family": "Singletons",
+      "language": "swift",
+      "expectation": "no_leak",
+      "navigation": "push_pop",
+      "pattern": "let analytics = L57Analytics.shared: màn hình dùng singleton, không sở hữu nó",
+      "note": "Singleton sống suốt app là bình thường; detector đúng không báo `outlived`",
+      "objects": [
+        {
+          "log": "L57",
+          "className": "L57ArticleViewController",
+          "leaks": false
+        }
+      ]
+    },
+    {
+      "id": "L58",
+      "name": "Screen holds weak var to app-lifetime object",
+      "family": "Singletons",
+      "language": "swift",
+      "expectation": "no_leak",
+      "navigation": "push_pop",
+      "pattern": "weak var coordinator = L58AppCoordinator.main",
+      "note": "Tham chiếu weak không phải sở hữu; detector đúng không báo `outlived`",
+      "objects": [
+        {
+          "log": "L58",
+          "className": "L58SettingsViewController",
+          "leaks": false
+        }
+      ]
+    },
+    {
+      "id": "L59",
+      "name": "Screen references shared cache, type in allowedTypes",
+      "family": "Singletons",
+      "language": "swift",
+      "expectation": "allowed",
+      "navigation": "push_pop",
+      "pattern": "Như L57 nhưng type của singleton nằm trong allowedTypes",
+      "objects": [
+        {
+          "log": "L59",
+          "className": "L59PhotoViewController",
+          "leaks": false
+        }
+      ]
+    },
+    {
+      "id": "L60",
+      "name": "Coordinator registry keeps pushed screen",
+      "family": "Realistic flows",
+      "language": "swift",
+      "expectation": "leak_rooted",
+      "navigation": "push_pop",
+      "pattern": "Coordinator đăng ký vào L60AppCoordinators.shared, giữ mọi màn đã push; flow không bao giờ kết thúc",
+      "retainPath": "L60AppCoordinators.shared → children → coordinator → screens → L60",
+      "cause": [
+        "held by singleton"
+      ],
+      "objects": [
+        {
+          "log": "L60",
+          "className": "L60CheckoutViewController",
+          "leaks": true,
+          "kind": "screen"
+        },
+        {
+          "log": "L60.coordinator",
+          "className": "L60CheckoutCoordinator",
+          "leaks": true
+        }
+      ]
+    },
+    {
+      "id": "L61",
+      "name": "Screen ⇄ coordinator strong",
+      "family": "Realistic flows",
+      "language": "swift",
+      "expectation": "leak_cycle",
+      "navigation": "push_pop",
+      "pattern": "VC.coordinator strong, coordinator.screen strong",
+      "retainPath": "L61 → coordinator → screen → L61",
+      "cause": [
+        "cycle"
+      ],
+      "objects": [
+        {
+          "log": "L61",
+          "className": "L61ProfileViewController",
+          "leaks": true,
+          "kind": "screen"
+        },
+        {
+          "log": "L61.coordinator",
+          "className": "L61ProfileCoordinator",
+          "leaks": true
+        }
+      ]
+    },
+    {
+      "id": "L62",
+      "name": "Screen → coordinator, weak back reference",
+      "family": "Realistic flows",
+      "language": "swift",
+      "expectation": "no_leak",
+      "navigation": "push_pop",
+      "pattern": "Như L61 nhưng coordinator.screen weak",
+      "objects": [
+        {
+          "log": "L62",
+          "className": "L62ProfileViewController",
+          "leaks": false
+        },
+        {
+          "log": "L62.coordinator",
+          "className": "L62ProfileCoordinator",
+          "leaks": false
+        }
+      ]
+    },
+    {
+      "id": "L63",
+      "name": "MVVM binding closure captures self",
+      "family": "Realistic flows",
+      "language": "swift",
+      "expectation": "leak_cycle",
+      "navigation": "push_pop",
+      "pattern": "viewModel.name.bind { self.nameLabel.text = $0 } (Observable<T> generic giữ mảng closure)",
+      "retainPath": "L63 → viewModel → name → observers → closure → L63",
+      "cause": [
+        "cycle"
+      ],
+      "objects": [
+        {
+          "log": "L63",
+          "className": "L63BindingViewController",
+          "leaks": true,
+          "kind": "screen"
+        },
+        {
+          "log": "L63.viewModel",
+          "className": "L63ProfileViewModel",
+          "leaks": true
+        }
+      ]
+    },
+    {
+      "id": "L64",
+      "name": "MVVM binding with weak self",
+      "family": "Realistic flows",
+      "language": "swift",
+      "expectation": "no_leak",
+      "navigation": "push_pop",
+      "pattern": "Như L63 nhưng [weak self]",
+      "objects": [
+        {
+          "log": "L64",
+          "className": "L64WeakBindingViewController",
+          "leaks": false
+        },
+        {
+          "log": "L64.viewModel",
+          "className": "L64ProfileViewModel",
+          "leaks": false
+        }
+      ]
+    },
+    {
+      "id": "L65",
+      "name": "Table cell closure captures screen",
+      "family": "Realistic flows",
+      "language": "swift",
+      "expectation": "leak_cycle",
+      "navigation": "push_pop",
+      "pattern": "cellForRow gán cell.onLike = { self.like(row) }",
+      "retainPath": "L65 → view → … → tableView → cell → onLike → L65",
+      "cause": [
+        "cycle"
+      ],
+      "objects": [
+        {
+          "log": "L65",
+          "className": "L65FeedViewController",
+          "leaks": true,
+          "kind": "screen"
+        }
+      ]
+    },
+    {
+      "id": "L66",
+      "name": "ObjC table data source owns screen",
+      "family": "Realistic flows",
+      "language": "objc",
+      "expectation": "leak_cycle",
+      "navigation": "push_pop",
+      "pattern": "VC ObjC giữ data source object, data source có @property (strong) owner = VC",
+      "retainPath": "L66 → _dataSource → _owner → L66",
+      "cause": [
+        "cycle"
+      ],
+      "note": "VC giữ strong data source của chính nó là đúng; lỗi nằm ở `owner`. Cảnh báo strongDelegate cho `dataSource` sẽ chỉ sai chỗ",
+      "objects": [
+        {
+          "log": "L66",
+          "className": "LL66FeedViewController",
+          "leaks": true,
+          "kind": "screen"
+        },
+        {
+          "log": "L66.dataSource",
+          "className": "LL66FeedDataSource",
+          "leaks": true
+        }
+      ]
+    },
+    {
+      "id": "L67",
+      "name": "Table cell closure with weak self",
+      "family": "Realistic flows",
+      "language": "swift",
+      "expectation": "no_leak",
+      "navigation": "push_pop",
+      "pattern": "Như L65 nhưng [weak self]",
+      "objects": [
+        {
+          "log": "L67",
+          "className": "L67WeakFeedViewController",
+          "leaks": false
+        }
+      ]
+    },
+    {
+      "id": "L68",
+      "name": "Window root replaced",
+      "family": "Realistic flows",
+      "language": "swift",
+      "expectation": "leak_cycle",
+      "navigation": "replace_window_root",
+      "pattern": "Window phụ: rootViewController bị thay; root cũ có closure cycle",
+      "retainPath": "L68.oldRoot → onRefresh → closure → L68.oldRoot",
+      "cause": [
+        "cycle"
+      ],
+      "objects": [
+        {
+          "log": "L68.host",
+          "className": "L68WindowHostViewController",
+          "leaks": false
+        },
+        {
+          "log": "L68.oldRoot",
+          "className": "L68OldRootViewController",
+          "leaks": true,
+          "kind": "screen"
+        },
+        {
+          "log": "L68.newRoot",
+          "className": "L68NewRootViewController",
+          "leaks": false
+        }
+      ]
+    },
+    {
+      "id": "L69",
+      "name": "Navigation root replaced (setViewControllers)",
+      "family": "Realistic flows",
+      "language": "mixed",
+      "expectation": "leak_cycle",
+      "navigation": "set_view_controllers",
+      "pattern": "Nav present, setViewControllers([new]) thay root ObjC có block cycle",
+      "retainPath": "L69.legacyRoot → _onRefresh → block → L69.legacyRoot",
+      "cause": [
+        "cycle"
+      ],
+      "objects": [
+        {
+          "log": "L69.host",
+          "className": "L69NavHostController",
+          "leaks": false
+        },
+        {
+          "log": "L69.legacyRoot",
+          "className": "LL69LegacyRootViewController",
+          "leaks": true,
+          "kind": "screen"
+        },
+        {
+          "log": "L69.freshRoot",
+          "className": "L69FreshRootViewController",
+          "leaks": false
+        }
+      ]
+    },
+    {
+      "id": "L70",
+      "name": "Tab bar presented and dismissed",
+      "family": "Realistic flows",
+      "language": "swift",
+      "expectation": "no_leak",
+      "navigation": "present_dismiss",
+      "pattern": "Tab bar 2 tab, present rồi dismiss, không thay tab: đối chứng cho L71",
+      "objects": [
+        {
+          "log": "L70.host",
+          "className": "L70TabHostController",
+          "leaks": false
+        },
+        {
+          "log": "L70.first",
+          "className": "L70FirstTabViewController",
+          "leaks": false
+        },
+        {
+          "log": "L70.second",
+          "className": "L70SecondTabViewController",
+          "leaks": false
+        }
+      ]
+    },
+    {
+      "id": "L71",
+      "name": "Tab replaced (setViewControllers)",
+      "family": "Realistic flows",
+      "language": "swift",
+      "expectation": "leak_cycle",
+      "navigation": "replace_tabs",
+      "pattern": "Tab bar present, tab đầu bị thay bằng setViewControllers; tab cũ có closure cycle",
+      "retainPath": "L71.oldTab → onRefresh → closure → L71.oldTab",
+      "cause": [
+        "cycle"
+      ],
+      "objects": [
+        {
+          "log": "L71.host",
+          "className": "L71TabHostController",
+          "leaks": false
+        },
+        {
+          "log": "L71.oldTab",
+          "className": "L71OldTabViewController",
+          "leaks": true,
+          "kind": "screen"
+        },
+        {
+          "log": "L71.home",
+          "className": "L71HomeTabViewController",
+          "leaks": false
+        },
+        {
+          "log": "L71.newTab",
+          "className": "L71NewTabViewController",
+          "leaks": false
+        }
+      ]
+    },
+    {
+      "id": "L72",
+      "name": "Swift Task started by ObjC screen outlives it",
+      "family": "Realistic flows",
+      "language": "mixed",
+      "expectation": "leak_task",
+      "navigation": "push_pop",
+      "pattern": "VC ObjC gọi helper Swift tạo Task [weak screen] chờ mãi trên stream không finish",
+      "retainPath": "LabEndlessFeed.shared → stream → Task đang chờ",
+      "cause": [
+        "still running"
+      ],
+      "objects": [
+        {
+          "log": "L72",
+          "className": "LL72LiveScoreViewController",
+          "leaks": false
+        }
+      ]
+    }
+  ]
+}

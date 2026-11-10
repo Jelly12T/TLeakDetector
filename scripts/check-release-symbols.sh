@@ -7,9 +7,9 @@
 #   scripts/check-release-symbols.sh [options]
 #
 # Options:
-#   --project PATH         .xcodeproj to archive   (default: Examples/HostApp/HostApp.xcodeproj)
+#   --project PATH         .xcodeproj to archive   (default: AppDemo/AppDemo.xcodeproj)
 #   --workspace PATH       .xcworkspace to archive (instead of --project)
-#   --scheme NAME          scheme                  (default: HostApp)
+#   --scheme NAME          scheme                  (default: AppDemo)
 #   --configuration NAME   build configuration     (default: Release)
 #   --archive PATH         check an existing .xcarchive, do not build
 #   --expect-present       invert: FAIL if the symbols are NOT found
@@ -21,9 +21,9 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PROJECT="$ROOT/Examples/HostApp/HostApp.xcodeproj"
+PROJECT="$ROOT/AppDemo/AppDemo.xcodeproj"
 WORKSPACE=""
-SCHEME="HostApp"
+SCHEME="AppDemo"
 CONFIGURATION="Release"
 ARCHIVE=""
 EXPECT_PRESENT=0

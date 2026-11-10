@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "suppressions": [
+    {
+      "signature": { "type": "LL13SuppressedLegacyViewController", "kind": "screen" },
+      "reason": "Known block cycle in legacy Objective-C screen, kept to show suppression (AppDemo L13)",
+      "owner": "thachlh",
+      "expires": "2099-12-31"
+    }
+  ]
+}
