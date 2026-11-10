@@ -8,7 +8,7 @@
 #if LEAK_DETECTOR_ENABLED
 import Foundation
 
-package enum LeakKind: String, Sendable {
+package enum LeakKind: String, Sendable, CaseIterable {
     /// The closed screen itself is still alive.
     case screen
     /// The screen is gone but this object is not: something outside the screen holds it.

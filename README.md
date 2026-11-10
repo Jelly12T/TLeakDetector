@@ -10,7 +10,7 @@ Bản Release vẫn build module nhưng module rỗng, không có symbol nào c�
 > Giới hạn hiện tại:
 > - Chỉ VC compile trong app target mới được mark. VC nằm trong dynamic framework bị bỏ qua.
 > - Container tự viết phải gọi `willMove(toParent: nil)` trước `removeFromParent()`, đúng contract của UIKit.
-> - VC được cache lại sau khi đóng (giữ để mở lại) sẽ bị báo leak.
+> - VC được cache lại sau khi đóng (giữ để mở lại) phải khai báo `allowedTypes` hoặc conform `LeakOptOut`, nếu không sẽ bị báo leak. Xem [Cấu hình](#cấu-hình).
 
 ## Cài đặt
 
@@ -61,6 +61,59 @@ Report đi qua `os_log`, subsystem `TLeakDetector`. Trong Console.app lọc bằ
 | `screen` | Chính màn hình vừa đóng vẫn còn sống |
 | `outlived` | Màn hình đã chết nhưng một object nó giữ vẫn sống, tức có thứ bên ngoài đang giữ object đó |
 
+## Cấu hình
+
+`install()` nhận một `LeakConfiguration`. Mọi tham số đều có giá trị mặc định:
+
+```swift
+#if DEBUG
+TLeakDetector.install(LeakConfiguration(allowedTypes: [ProductCacheViewController.self]))
+#endif
+```
+
+| Tham số | Mặc định | Ý nghĩa |
+|---|---|---|
+| `t1`, `t2` | `2`, `8` | Số giây sau khi rời màn hình: lần check đầu và lúc báo |
+| `mode` | `nil` | `.crash`, `.debugger` hoặc `.log`. `nil` nghĩa là có debugger thì dừng, không có thì crash. Env `TLEAK_MODE` ghi đè giá trị này |
+| `maxSubtreeDepth` | `nil` | Số bước bên dưới màn hình được mark (child, view, subview, property). `nil` là không giới hạn |
+| `allowedTypes` | `[]` | Các type được phép sống sau khi rời màn hình, tính cả subclass. Ví dụ: VC được cache |
+| `suppressionFile` | `LeakSuppressions.json` trong bundle chính | File liệt kê các leak đã biết |
+
+Type nằm trong `allowedTypes` hoặc conform `LeakOptOut` sẽ không bao giờ bị mark. View của nó, child của nó và
+những gì nó giữ cũng không bị mark. Protocol này không tồn tại ở Release, nên conformance phải bọc `#if DEBUG`:
+
+```swift
+#if DEBUG
+extension MiniPlayerViewController: LeakOptOut {}
+#endif
+```
+
+### Suppression file
+
+Dùng khi áp dụng tool vào codebase cũ: leak đã biết chỉ được log, không dừng hay crash app cho tới ngày hết hạn.
+Hết hạn thì leak bị báo lại như một leak mới. Xem file mẫu ở [LeakZoo/LeakZoo/LeakSuppressions.json](LeakZoo/LeakZoo/LeakSuppressions.json).
+
+```json
+{
+  "version": 1,
+  "suppressions": [
+    {
+      "signature": { "type": "ProfileViewController", "kind": "screen" },
+      "reason": "Closure trong ProfileViewModel bắt self, sửa ở ticket APP-123",
+      "owner": "thachlh",
+      "expires": "2026-12-31"
+    }
+  ]
+}
+```
+
+- `signature.type` là tên type ở dòng `LEAK` của report, `signature.kind` là giá trị ở dòng `kind:`.
+- `expires` có dạng `yyyy-MM-dd` và còn hiệu lực hết ngày đó, theo giờ của máy. `reason` và `owner` là bắt buộc.
+- Entry sai format bị bỏ qua, các entry còn lại vẫn có hiệu lực. File sai cú pháp JSON thì bị bỏ qua toàn bộ.
+  Mọi lỗi đều được log ở category `config` (`subsystem:TLeakDetector category:config`) và không làm crash app.
+- Chỉ nên đưa file vào bundle Debug: đặt `EXCLUDED_SOURCE_FILE_NAMES = LeakSuppressions.json` cho configuration
+  Release của target, như LeakZoo đang làm.
+
 ## Mở trong Xcode
 
 ```sh
@@ -82,7 +135,7 @@ Workspace nằm trong thư mục con để `xcodebuild` ở thư mục gốc v�
 ├── Tests/LeakCoreTests/
 ├── scripts/check-release-symbols.sh   kiểm tra tool không lọt vào Release
 ├── Examples/HostApp/             app tối giản để script trên archive
-├── LeakZoo/                      app 16 scenario leak / không leak, kèm expected.json
+├── LeakZoo/                      app 19 scenario leak / không leak, kèm expected.json
 ├── Workspace/                    JellyLeakDetector.xcworkspace để mở mọi thứ trong Xcode
 ├── Spikes/                       thí nghiệm có timebox, không phải code production
 └── docs/adr/                     các quyết định kiến trúc
@@ -128,14 +181,15 @@ Nếu project có configuration riêng, chạy script với `--configuration <t�
 
 ## LeakZoo: bài kiểm tra cho tool
 
-[LeakZoo/](LeakZoo/) là app UIKit cố ý chứa 16 scenario **đã biết đáp án**. Mỗi sprint dùng nó để chấm tool:
-10 case leak phải được báo, và 6 case không leak không được báo.
+[LeakZoo/](LeakZoo/) là app UIKit cố ý chứa 19 scenario **đã biết đáp án**. Mỗi sprint dùng nó để chấm tool:
+10 case leak phải được báo, 8 case không leak hoặc được phép sống không được báo, và 1 case đã suppress chỉ được log.
 
 | Nhóm | Case | Ví dụ |
 |---|---|---|
 | Leak, cycle | Z01–Z06 | closure bắt `self`, delegate strong, `UIAction`, child VC, popToRoot, Combine `sink` |
 | Leak, rooted | Z07–Z10 | Timer không invalidate, observer không remove, Task trên AsyncStream không finish, biến static |
 | Không leak | Z11–Z16 | `[weak self]`, Task bị cancel, Timer được invalidate, `asyncAfter` (deinit trễ khoảng 1 giây), child và popToRoot đúng cách |
+| Được phép, suppress | Z17–Z19 | VC được cache (`allowedTypes`), VC conform `LeakOptOut`, leak có trong `LeakSuppressions.json` (chỉ log) |
 
 Có đủ 4 cách vào/ra màn hình: push/pop, present/dismiss, popToRoot, add/remove child.
 
@@ -143,7 +197,7 @@ Có đủ 4 cách vào/ra màn hình: push/pop, present/dismiss, popToRoot, add/
   Mỗi case có `expectation`, `navigation`, `retainPath` (ai đang giữ object) và danh sách object kèm cờ `leaks`.
   Nếu id trong JSON không có VC tương ứng thì app crash ngay lúc mở.
 - Mỗi VC in `[LeakZoo] t=<uptime> deinit <id>` khi bị giải phóng.
-- Mở app với launch argument `--autorun` thì app tự mở rồi đóng lần lượt 16 case và ghi log `open` / `close` / `deinit`.
+- Mở app với launch argument `--autorun` thì app tự mở rồi đóng lần lượt 19 case và ghi log `open` / `close` / `deinit`.
 
 ```sh
 open LeakZoo/LeakZoo.xcodeproj        # scheme LeakZoo, chạy trên simulator

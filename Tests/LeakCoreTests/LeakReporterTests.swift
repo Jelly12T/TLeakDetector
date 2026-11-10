@@ -6,18 +6,22 @@
 //
 
 #if LEAK_DETECTOR_ENABLED
+import Foundation
+import os
 import Testing
 @testable import LeakCore
 
 @MainActor
 private final class EffectRecorder {
     var debuggerAttached = false
+    var now = Date(timeIntervalSince1970: 0)
     private(set) var events: [String] = []
-    private(set) var logs: [String] = []
+    private(set) var logs: [(level: OSLogType, text: String)] = []
 
     var effects: LeakReporter.Effects {
         LeakReporter.Effects(
-            log: { self.logs.append($0); self.events.append("log") },
+            log: { self.logs.append(($0, $1)); self.events.append("log") },
+            now: { self.now },
             isDebuggerAttached: { self.debuggerAttached },
             breakIntoDebugger: { self.events.append("break") },
             crash: { _ in self.events.append("crash") })
@@ -78,7 +82,7 @@ struct LeakReporterTests {
     func content() throws {
         let others = (0..<12).map { LeakReport.Object(typeName: "UILabel", path: "ProfileVC.view.subviews[\($0)]", address: 0) }
         LeakReporter(mode: .log, effects: recorder.effects).report(report(alsoAlive: others))
-        let text = try #require(recorder.logs.first)
+        let text = try #require(recorder.logs.first).text
         #expect(text.contains("LEAK ProfileVC (0xbeef) still alive 8.0s after pop of ProfileVC"))
         #expect(text.contains("kind: screen"))
         #expect(text.contains("also alive (12):"))
@@ -90,7 +94,44 @@ struct LeakReporterTests {
     @Test("Pausing tells the developer how to resume")
     func pauseHint() throws {
         LeakReporter(mode: .debugger, effects: recorder.effects).report(report())
-        #expect(try #require(recorder.logs.first).hasSuffix("Continue to resume."))
+        #expect(try #require(recorder.logs.first).text.hasSuffix("Continue to resume."))
+    }
+
+    // MARK: Suppressions
+
+    private func suppression(kind: LeakKind = .screen) -> LeakSuppression {
+        LeakSuppression(signature: LeakSignature(typeName: "ProfileVC", kind: kind),
+                        reason: "Cached on purpose", owner: "thachlh",
+                        expires: "2026-12-31", endsAt: Date(timeIntervalSince1970: 100))
+    }
+
+    @Test("Suppressed leak: logged once as a notice, never pauses or crashes")
+    func suppressed() throws {
+        recorder.now = Date(timeIntervalSince1970: 99)
+        let reporter = LeakReporter(mode: .crash, suppressions: [suppression()], effects: recorder.effects)
+        reporter.report(report())
+        reporter.report(report())
+        #expect(recorder.events == ["log"])
+        let log = try #require(recorder.logs.first)
+        #expect(log.level == .default)
+        #expect(log.text.contains("suppressed until 2026-12-31: Cached on purpose (owner: thachlh)"))
+    }
+
+    @Test("Expired suppression: reported like a new leak, saying which entry expired")
+    func expired() throws {
+        recorder.now = Date(timeIntervalSince1970: 100)
+        LeakReporter(mode: .crash, suppressions: [suppression()], effects: recorder.effects).report(report())
+        #expect(recorder.events == ["log", "crash"])
+        let log = try #require(recorder.logs.first)
+        #expect(log.level == .error)
+        #expect(log.text.contains("suppression expired on 2026-12-31: Cached on purpose (owner: thachlh)"))
+    }
+
+    @Test("A suppression covers its own signature only")
+    func otherSignature() {
+        LeakReporter(mode: .crash, suppressions: [suppression(kind: .outlived)], effects: recorder.effects)
+            .report(report())
+        #expect(recorder.events == ["log", "crash"])
     }
 }
 

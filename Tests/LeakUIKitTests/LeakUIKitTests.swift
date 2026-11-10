@@ -17,6 +17,8 @@ final class ScreenVC: UIViewController {
     weak var weakModel: ScreenModel?
 }
 final class ChildVC: UIViewController {}
+final class CachedVC: UIViewController {}
+final class OptedOutVC: UIViewController, LeakOptOut {}
 
 private func isTestType(_ cls: AnyClass) -> Bool {
     ObjectIdentifier(cls) == ObjectIdentifier(ScreenModel.self)
@@ -61,6 +63,49 @@ struct SubtreeCollectorTests {
         let items = SubtreeCollector.collect(from: screen, filter: testFilter)
         #expect(!screen.isViewLoaded)
         #expect(paths(items) == ["ScreenVC", "ScreenVC.model"])
+    }
+
+    private func exemptFilter() -> SubtreeFilter {
+        var filter = testFilter
+        filter.exempt = LeakConfiguration(allowedTypes: [CachedVC.self], suppressionFile: nil).isExempt
+        return filter
+    }
+
+    @Test("Allowlisted or opted-out root: nothing collected")
+    func exemptRoot() {
+        for screen in [CachedVC(), OptedOutVC()] {
+            screen.loadViewIfNeeded()
+            #expect(SubtreeCollector.collect(from: screen, filter: exemptFilter()).isEmpty)
+        }
+    }
+
+    @Test("Exempt child: it, its view and what is below are skipped; the rest of the screen is collected")
+    func exemptChild() {
+        let screen = ScreenVC(), child = CachedVC()
+        screen.addChild(child)
+        screen.view.addSubview(child.view)
+        child.didMove(toParent: screen)
+        child.view.addSubview(UILabel())
+
+        let items = SubtreeCollector.collect(from: screen, filter: exemptFilter())
+        #expect(paths(items) == ["ScreenVC", "ScreenVC.view", "ScreenVC.model"])
+    }
+
+    @Test("maxDepth limits how far below the root objects are marked")
+    func depthLimit() {
+        let screen = ScreenVC()
+        let label = UILabel()
+        screen.view.addSubview(label)
+        label.addSubview(UIView())
+
+        func collected(_ depth: Int) -> [String] {
+            var filter = testFilter
+            filter.maxDepth = depth
+            return paths(SubtreeCollector.collect(from: screen, filter: filter))
+        }
+        #expect(collected(0) == ["ScreenVC"])
+        #expect(collected(1) == ["ScreenVC", "ScreenVC.view", "ScreenVC.model"])
+        #expect(collected(2) == ["ScreenVC", "ScreenVC.view", "ScreenVC.view.subviews[0]", "ScreenVC.model"])
     }
 
     @Test("Weak properties are followed too (Mirror limitation, see ADR 002)")
