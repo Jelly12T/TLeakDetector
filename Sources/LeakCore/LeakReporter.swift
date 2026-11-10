@@ -102,15 +102,18 @@ package final class LeakReporter {
     private var reported: Set<LeakSignature> = []
     private var warned: Set<String> = []
     private let ignoredPatterns: Set<LeakPattern>
+    private let verbose: Bool
 
     package init(
         mode: LeakReportMode? = nil,
         suppressions: [LeakSuppression] = [],
         exportDirectory: URL? = nil,
         ignoredPatterns: Set<LeakPattern> = [],
+        verbose: Bool = false,
         effects: Effects = .live
     ) {
         self.ignoredPatterns = ignoredPatterns
+        self.verbose = verbose
         self.mode = mode
         self.suppressions = suppressions
         self.exportDirectory = exportDirectory
@@ -119,7 +122,7 @@ package final class LeakReporter {
 
     package func report(_ finding: some LeakFinding) {
         guard reported.insert(finding.signature).inserted else { return }
-        var message = finding.description
+        var message = finding.text(verbose: verbose)
         if let suppression = suppressions.first(where: { $0.covers(finding.signature) }) {
             let note = "\(suppression.reason) (owner: \(suppression.owner))"
             guard effects.now() >= suppression.endsAt else {
@@ -128,8 +131,8 @@ package final class LeakReporter {
             }
             message += "\n  suppression expired on \(suppression.expires): \(note)"
         }
-        if let leak = finding as? LeakReport, let files = export(leak) {
-            message += "\n  graph: \(files.dot.path)\n         \(files.json.path)"
+        if let leak = finding as? LeakReport {
+            message += export(leak).map { "\n  graph: \($0.path)" }.joined()
         }
         // Resolved per report: a debugger can be attached after launch.
         switch mode ?? (effects.isDebuggerAttached() ? .debugger : .crash) {
@@ -150,14 +153,15 @@ package final class LeakReporter {
         effects.warn(warning.description)
     }
 
-    /// The searched graph as `<time>-<Type>.dot` and `.json`, the cause highlighted.
-    private func export(_ report: LeakReport) -> (dot: URL, json: URL)? {
-        guard let directory = exportDirectory, let analysis = report.analysis, let graph = analysis.explored else { return nil }
-        let name = "\(Self.fileTime.string(from: effects.now()))-\(report.leaked.typeName)"
-        let dot = directory.appendingPathComponent(name + ".dot"), json = directory.appendingPathComponent(name + ".json")
-        guard effects.write(Data(graph.dot(highlighting: analysis.highlighted).utf8), dot),
-              effects.write(graph.json(highlighting: analysis.highlighted), json) else { return nil }
-        return (dot, json)
+    /// Only when `verbose`: the whole searched graph as `<time>-<Type>.dot` and `.json`. The report line already shows the chain.
+    private func export(_ report: LeakReport) -> [URL] {
+        guard verbose, let directory = exportDirectory, let analysis = report.analysis, let graph = analysis.explored else { return [] }
+        let base = directory.appendingPathComponent("\(Self.fileTime.string(from: effects.now()))-\(report.leaked.typeName)")
+        let dot = base.appendingPathExtension("dot"), json = base.appendingPathExtension("json")
+        var files: [URL] = []
+        if effects.write(Data(graph.dot(highlighting: analysis.highlighted).utf8), dot) { files.append(dot) }
+        if effects.write(graph.json(highlighting: analysis.highlighted), json) { files.append(json) }
+        return files
     }
 
     private static let fileTime: DateFormatter = {

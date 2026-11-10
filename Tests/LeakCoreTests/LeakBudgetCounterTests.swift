@@ -40,7 +40,7 @@ struct LeakBudgetCounterTests {
         #expect(report.signature == LeakSignature(typeName: "Screen", kind: .budget))
         #expect(report.budget == 1)
         #expect(report.alive == [first, second].map { UInt(bitPattern: ObjectIdentifier($0)) })
-        #expect(report.description.contains("LEAK Screen: 2 instances alive, budget is 1"))
+        #expect(report.description.contains("LEAK Screen (budget): 2 instances alive, budget is 1"))
         withExtendedLifetime((first, second)) {}
     }
 

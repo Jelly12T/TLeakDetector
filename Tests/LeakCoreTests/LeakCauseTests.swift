@@ -39,7 +39,7 @@ struct LeakCauseTests {
         let chain = RetainChain(nodes: [screen, model, closure], paths: ["model", "onChange", RetainPath([.capture(0)])],
                                 certainties: [true, true, true])
         let text = report(.cycle(chain)).description
-        #expect(text.contains("    ProfileModel.onChange → closure #1 in ProfileVC.viewDidLoad()"))
+        #expect(text.contains("  retain cycle: ProfileVC.model → ProfileModel.onChange → closure #1 in ProfileVC.viewDidLoad().capture 0 → ProfileVC"))
         #expect(text.contains("  fix: capture self weakly in closure #1 in ProfileVC.viewDidLoad(): `{ [weak self] in … }`"))
     }
 
@@ -49,6 +49,12 @@ struct LeakCauseTests {
         #expect(LeakFixes.suggestions(for: .cycle(chain)) == ["declare `ProfileModel.delegate` as `weak var` (and its protocol as `AnyObject`)"])
     }
 
+    @Test("A cycle through an Objective-C delegate ivar: the fix uses property syntax")
+    func objcDelegateCycle() {
+        let chain = RetainChain(nodes: [screen, model], paths: ["_model", "_delegate"], certainties: [true, true])
+        #expect(LeakFixes.suggestions(for: .cycle(chain)) == ["declare `ProfileModel.delegate` as `@property (weak)`"])
+    }
+
     @Test("Held by a running task: the chain from the task, how to cancel it, and the closure to fix")
     func heldByTask() {
         let holder = LeakHolder(.task, detail: "closure #1 in ProfileVC.viewDidLoad()")
@@ -56,8 +62,7 @@ struct LeakCauseTests {
                                 certainties: [true], end: screen)
         let leak = report(.heldBy(holder, chain))
         let lines = leak.description.split(separator: "\n").map(String.init)
-        #expect(lines.contains("  held by a running Task (closure #1 in ProfileVC.viewDidLoad()):"))
-        #expect(lines.contains("    Task.operation {closure #1 in ProfileVC.viewDidLoad()} → ProfileVC"))
+        #expect(lines.contains("  held by a running Task (closure #1 in ProfileVC.viewDidLoad()): Task.operation {closure #1 in ProfileVC.viewDidLoad()} → ProfileVC"))
         #expect(lines.contains { $0.hasPrefix("  fix: cancel the task when the screen closes") })
         #expect(lines.contains { $0.hasPrefix("  fix: capture self weakly in closure #1 in ProfileVC.viewDidLoad()") })
         #expect(leak.signature.cycle == "Task.operation {closure #1 in ProfileVC.viewDidLoad()} → ProfileVC")

@@ -93,39 +93,34 @@ Mỗi leak chỉ báo một lần trong một lần chạy app.
 ### Report
 
 ```
-[TLeakDetector] LEAK ProfileViewController (0x10380c400) still alive 2.0s after pop of ProfileViewController
-  kind: screen, the closed screen itself is still alive
-  path: ProfileViewController
-  retain cycle (certain):
-    ProfileViewController.worker → ProfileWorker
-    ProfileWorker.delegate → ProfileViewController
-  fix: declare `ProfileWorker.delegate` as `weak var` (and its protocol as `AnyObject`)
-  also alive (2):
-    UIView  ProfileViewController.view
-    UILabel  ProfileViewController.view.subviews[0]
-  graph: …/tmp/TLeakDetector/20261110-112052-ProfileViewController.dot
+[TLeakDetector] LEAK ProfileViewController (screen)
+  also alive: ProfileViewModel  ProfileViewController.viewModel
+  retain cycle: ProfileViewController._worker → ProfileWorker._delegate → ProfileViewController
+  fix: declare `ProfileWorker.delegate` as `@property (weak)`
 ```
+
+Đọc từ trên xuống: **ai bị leak** (dòng `LEAK`), **cái gì của nó còn sống** (`also alive`), **vì sao** (chuỗi model nào
+giữ model nào, qua field nào), **sửa ở đâu** (`fix:`). Tool không biết số dòng code; tìm field bằng ⇧⌘O trong Xcode,
+ví dụ `ProfileWorker.delegate`. Không tìm được nguyên nhân (ví dụ bị biến static giữ) thì report chỉ có dòng `LEAK`.
 
 Report đi qua `os_log`, subsystem `TLeakDetector`. Ngoài console của Xcode, có thể lọc trong Console.app bằng
 `subsystem:TLeakDetector`.
 
 | Dòng | Nghĩa |
 |---|---|
-| `LEAK <Type> (0x…)` | Object bị leak, gần màn hình gốc nhất. Địa chỉ dùng để tìm trong Memory Graph hoặc `po` trong lldb |
-| `still alive 2.0s after pop of <Root>` | Sống thêm bao lâu, sau sự kiện nào (`pop`, `dismiss`, `removeFromParent`, `replaceRoot`), của màn hình nào |
-| `kind:` | Loại leak, xem bảng dưới |
-| `path:` | Đường từ màn hình gốc tới object, ví dụ `ProfileVC.children[0].view.subviews[2]` hoặc `ProfileVC.viewModel` |
-| `retain cycle (certain):` | Cycle strong reference, mỗi dòng một bước `A.field → B`. Mọi bước đều chắc chắn là strong, nên báo ngay sau 2 giây |
-| `possible retain cycle …` | Cycle có bước đánh dấu `?`: tool không chứng minh được bước đó là strong |
+| `LEAK <Type> (<kind>)` | Object bị leak, gần màn hình gốc nhất, và loại leak (xem bảng dưới) |
+| `path:` | Chỉ có khi object không phải chính màn hình: đường từ màn hình tới nó, ví dụ `ProfileVC.viewModel` |
+| `also alive:` | Model, child VC… của màn hình vẫn còn sống (tối đa 5). View không được liệt kê: màn hình còn sống thì view còn sống |
+| `retain cycle:` | Cycle strong reference `A.field → B.field → A`. Mọi bước đều chắc chắn là strong, nên báo ngay sau 2 giây. Field bắt đầu bằng `_` là ivar Objective-C |
+| `possible retain cycle (? may be weak):` | Cycle có bước đánh dấu `?`: tool không chứng minh được bước đó là strong |
 | `held by …:` | Không có cycle: một thứ bên ngoài màn hình đang giữ object (Task đang chạy, Timer còn valid, CADisplayLink, observer chưa remove, URLSession chưa invalidate), kèm chuỗi tham chiếu |
 | `… is still running` | Màn hình đã chết nhưng Task nó khởi chạy vẫn chạy (thường do `for await` trên stream không bao giờ finish) |
-| `no retain cycle through it` | Không có cycle và không biết ai giữ: thường là biến static, singleton, cache |
-| `… partly read` | Có object chỉ đọc được một phần, nên chưa loại trừ được cycle |
-| `… stopped at the … limit` | Search chạm giới hạn độ sâu, số object hoặc thời gian |
-| `fix:` | Gợi ý cách sửa theo hình dạng nguyên nhân |
-| `also alive (N):` | Các object khác của màn hình vẫn còn sống (tối đa 10 dòng). Màn hình còn sống thì view của nó còn sống là bình thường |
-| `graph:` | Graph đã duyệt, cycle tô đỏ. Xem bằng `dot -Tsvg file.dot -o graph.svg` (`brew install graphviz`). Trên simulator, đường dẫn này mở được ngay trên Mac |
+| `fix:` | Gợi ý cách sửa, đúng cú pháp Swift hoặc Objective-C |
 | `suppressed until …` | Leak có trong [suppression file](#suppression-file): chỉ log, không dừng app |
+
+Chạy với `TLEAK_VERBOSE=1` để report có thêm: sống thêm bao lâu sau sự kiện nào, địa chỉ object (để `po` trong lldb
+hoặc tìm trong Memory Graph), mọi object còn sống kể cả view, tool đã tìm những gì khi không ra nguyên nhân, và graph
+đầy đủ dạng `.dot`/`.json` (`dot -Tsvg file.dot -o graph.svg`, cần `brew install graphviz`).
 
 | `kind` | Nghĩa | Thường sửa ở đâu |
 |---|---|---|
@@ -138,7 +133,7 @@ Report đi qua `os_log`, subsystem `TLeakDetector`. Ngoài console của Xcode, 
 | Report cho thấy | Cách sửa |
 |---|---|
 | Closure của app trong cycle | `[weak self]` trong đúng closure được nêu |
-| Field kiểu `delegate` / `dataSource` | `weak var delegate`, protocol kế thừa `AnyObject` |
+| Field kiểu `delegate` / `dataSource` | Swift: `weak var delegate`, protocol kế thừa `AnyObject`. ObjC: `@property (weak)` |
 | `held by Timer` | `invalidate()` ở `viewDidDisappear`, hoặc timer dùng block với `[weak self]` |
 | `held by CADisplayLink` | `invalidate()` khi màn hình đóng, hoặc dùng weak proxy làm target |
 | Observer của NotificationCenter | `removeObserver(token)` khi đóng, block dùng `[weak self]` |
@@ -157,7 +152,7 @@ Mặc định: có debugger thì app dừng (`SIGTRAP`, bấm Continue chạy ti
 | Biến | Giá trị | Ý nghĩa |
 |---|---|---|
 | `TLEAK_MODE` | `debugger`, `crash`, `log` | `log`: chỉ ghi log, không dừng app. Ghi đè `LeakConfiguration.mode` |
-| `TLEAK_VERBOSE` | `1` | Log mỗi lần mark màn hình, số object và thời gian của mỗi lần search |
+| `TLEAK_VERBOSE` | `1` | Report có thêm thời gian, địa chỉ, mọi object còn sống, graph `.dot`/`.json`; log mỗi lần mark màn hình và mỗi lần search |
 
 ## Cảnh báo sớm
 
@@ -246,7 +241,7 @@ LeakConfiguration(instanceBudgets: [
   }
   ```
 
-Vượt budget thì báo `kind: budget`. Subclass được tính chung vào budget của class cha.
+Vượt budget thì báo `LEAK <Type> (budget)`. Subclass được tính chung vào budget của class cha.
 
 ### Suppression file
 
@@ -267,7 +262,7 @@ leak bị báo lại như mới. Thêm file `LeakSuppressions.json` vào bundle 
 }
 ```
 
-- `signature.type` là tên type ở dòng `LEAK`, `signature.kind` là giá trị ở dòng `kind:`.
+- `signature.type` là tên type ở dòng `LEAK`, `signature.kind` là giá trị trong ngoặc ngay sau tên type (`screen`, `outlived`, `budget`).
 - Thêm `"cycle": "ProfileVC.viewModel → ProfileViewModel.onChange → ProfileVC"` vào `signature` để chỉ bỏ qua đúng cycle đó.
 - `expires` dạng `yyyy-MM-dd`, còn hiệu lực hết ngày đó. `reason` và `owner` là bắt buộc.
 - Entry sai format bị bỏ qua, file sai cú pháp JSON bị bỏ qua toàn bộ. Lỗi được log ở category `config`, không crash app.
@@ -291,7 +286,7 @@ LeakConfiguration(graph: LeakGraphOptions(prunedModules: ["Combine"]))
 | `maxDuration` | `0.1` | Tổng số giây mỗi lần search, cộng mọi lát |
 | `sliceDuration` | `0.004` | Độ dài mỗi lát trên main thread |
 | `prunedModules` | `[]` | Module được ghé qua nhưng không duyệt tiếp, ví dụ `["UIKitCore"]` |
-| `exportDirectory` | thư mục tạm của app + `TLeakDetector/` | Nơi ghi file DOT/JSON của mỗi report. `nil`: không ghi |
+| `exportDirectory` | thư mục tạm của app + `TLeakDetector/` | Nơi ghi file DOT/JSON của mỗi report khi `TLEAK_VERBOSE=1`. `nil`: không ghi |
 
 Trong Instruments, mỗi lần search hiện thành một interval "retain graph" (os_signpost, category `graph`).
 

@@ -70,9 +70,7 @@ package enum LeakFixes {
             for fix in suggestions(for: chain) { add(fix) }
         case .running(let holder):
             add(fix(for: holder.kind))
-        case .noCycle:
-            add("look for a static, a singleton or a cache keeping it (Xcode Memory Graph: select it to see who references it)")
-        case .unknown:
+        case .noCycle, .unknown:
             break
         }
         return fixes
@@ -98,8 +96,10 @@ package enum LeakFixes {
         "remove the handler when the screen closes (`removeScriptMessageHandler(forName:)`), or register a weak proxy: "
         + "WKUserContentController retains its script message handlers"
 
+    /// `field` as read from memory: an Objective-C ivar backs a property and starts with `_`.
     package static func weakDelegateFix(_ owner: String, _ field: String) -> String {
-        "declare `\(owner).\(field)` as `weak var` (and its protocol as `AnyObject`)"
+        guard field.hasPrefix("_") else { return "declare `\(owner).\(field)` as `weak var` (and its protocol as `AnyObject`)" }
+        return "declare `\(owner).\(field.dropFirst())` as `@property (weak)`"
     }
 
     private static func suggestions(for chain: RetainChain) -> [String] {
@@ -119,7 +119,7 @@ package enum LeakFixes {
             if case .closure(let function) = to.kind, isAppClosure(function) {
                 fixes.append(weakSelfFix(function))
             }
-            if let field = chain.paths[index].steps.last.flatMap(fieldName), isDelegateName(field) {
+            if let field = chain.paths[index].steps.last.flatMap(fieldName), isDelegateName(stripped(field)) {
                 fixes.append(weakDelegateFix(from.name, field))
             }
             for node in [from, to] {
@@ -154,8 +154,12 @@ package enum LeakFixes {
     }
 
     private static func fieldName(_ step: RetainPath.Step) -> String? {
-        if case .field(let name) = step { return name.hasPrefix("_") ? String(name.dropFirst()) : name }
+        if case .field(let name) = step { return name }
         return nil
+    }
+
+    package static func stripped(_ field: String) -> String {
+        field.hasPrefix("_") ? String(field.dropFirst()) : field
     }
 
     package static func isDelegateName(_ name: String) -> Bool {

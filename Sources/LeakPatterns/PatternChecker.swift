@@ -34,11 +34,11 @@ package enum PatternChecker {
             for reference in LiveHeap().strongReferences(from: .object(member.object)) where reference.isCertain {
                 guard case .field(let raw)? = reference.path.steps.first, reference.path.steps.count == 1,
                       case .object(let target) = reference.target else { continue }
-                let field = raw.hasPrefix("_") ? String(raw.dropFirst()) : raw
+                let field = LeakFixes.stripped(raw)
                 guard LeakFixes.isDelegateName(field) else { continue }
                 let owner = typeName(member.object)
                 warn(.strongDelegate, member, "\(owner).\(field) holds \(typeName(target)) strongly",
-                     fix: LeakFixes.weakDelegateFix(owner, field))
+                     fix: LeakFixes.weakDelegateFix(owner, raw))
             }
         }
 

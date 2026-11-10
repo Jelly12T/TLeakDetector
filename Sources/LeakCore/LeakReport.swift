@@ -22,6 +22,12 @@ package enum LeakKind: String, Sendable, CaseIterable {
 /// Something the reporter shows: once per signature per run.
 package protocol LeakFinding: Sendable, CustomStringConvertible {
     var signature: LeakSignature { get }
+    /// `verbose` adds what only helps when digging: addresses, every object still alive.
+    func text(verbose: Bool) -> String
+}
+
+extension LeakFinding {
+    package func text(verbose: Bool) -> String { description }
 }
 
 /// Two reports with the same signature are the same leak.
@@ -59,18 +65,27 @@ package struct LeakReport: LeakFinding {
 
     static let alsoAliveLimit = 10
 
-    package var description: String {
+    package var description: String { text(verbose: false) }
+
+    /// Who leaked, what of it is still alive, why, and what to change; the rest only when `verbose`.
+    package func text(verbose: Bool) -> String {
         let age = String(format: "%.1f", detectedAt - markedAt)
-        var lines = [
-            "[TLeakDetector] LEAK \(leaked.typeName) (0x\(String(leaked.address, radix: 16))) still alive \(age)s after \(context.trigger.rawValue) of \(context.rootTypeName)",
-            "  kind: \(kind.rawValue), \(kind.summary(root: context.rootTypeName))",
-            "  path: \(leaked.path)",
-        ]
-        // The cause first: a long list of objects alive must not push it out of a truncated log line.
+        var lines = ["[TLeakDetector] LEAK \(leaked.typeName) (\(kind.rawValue))"]
+        if leaked.path != leaked.typeName { lines.append("  path: \(leaked.path)") }
+        if !verbose {
+            let owned = alsoAlive.filter { !Self.isViewHierarchy($0.path) }
+            lines += owned.prefix(Self.ownedLimit).map { "  also alive: \($0.typeName)  \($0.path)" }
+            if owned.count > Self.ownedLimit { lines.append("  also alive: … \(owned.count - Self.ownedLimit) more") }
+        }
         if let cause {
-            lines += Self.describe(cause, age: age, root: context.rootTypeName)
+            lines += Self.describe(cause, age: age, root: context.rootTypeName, verbose: verbose)
             lines += LeakFixes.suggestions(for: cause).map { "  fix: \($0)" }
         }
+        guard verbose else { return lines.joined(separator: "\n") }
+        let after = leaked.typeName == context.rootTypeName
+            ? context.trigger.rawValue
+            : "\(context.trigger.rawValue) of \(context.rootTypeName)"
+        lines.append("  still alive \(age)s after \(after), address 0x\(String(leaked.address, radix: 16))")
         if !alsoAlive.isEmpty {
             lines.append("  also alive (\(alsoAlive.count)):")
             lines += alsoAlive.prefix(Self.alsoAliveLimit).map { "    \($0.typeName)  \($0.path)" }
@@ -81,35 +96,41 @@ package struct LeakReport: LeakFinding {
         return lines.joined(separator: "\n")
     }
 
-    private static func describe(_ cause: LeakCause, age: String, root: String) -> [String] {
+    static let ownedLimit = 5
+
+    /// A screen alive keeps its views alive: they say nothing about the leak.
+    private static func isViewHierarchy(_ path: String) -> Bool {
+        path.hasSuffix(".view") || path.contains(".view.") || path.contains("subviews[")
+    }
+
+    /// Without a chain there is nothing to act on: what was searched is only worth showing when `verbose`.
+    private static func describe(_ cause: LeakCause, age: String, root: String, verbose: Bool) -> [String] {
         switch cause {
+        case .cycle(let cycle) where cycle.isCertain:
+            return ["  retain cycle: \(inline(cycle))"]
         case .cycle(let cycle):
-            let header = cycle.isCertain
-                ? "  retain cycle (certain):"
-                : "  possible retain cycle (references marked ? are not known to be strong):"
-            return [header] + steps(of: cycle)
+            return ["  possible retain cycle (? may be weak): \(inline(cycle))"]
         case .heldBy(let holder, let chain):
             guard !chain.nodes.isEmpty else { return ["  held by \(holder)"] }
-            return ["  held by \(holder):"] + steps(of: chain)
+            return ["  held by \(holder): \(inline(chain))"]
         case .running(let holder):
             return ["  \(holder.subject) is still running \(age)s after \(root) closed"]
         case .noCycle(let searched, 0):
-            return ["  no retain cycle through it (\(searched) objects searched): something outside the screen holds it,",
-                    "  e.g. a timer, an observer, a task or a singleton"]
+            return verbose ? ["  no retain cycle through it (\(searched) objects searched)"] : []
         case .noCycle(let searched, let partlyRead):
-            return ["  no retain cycle found through it (\(searched) objects searched, \(partlyRead) only partly read): probably held",
-                    "  from outside the screen, but a cycle through the partly read ones cannot be ruled out"]
+            return verbose ? ["  no retain cycle found through it (\(searched) objects searched, \(partlyRead) objects were only partly read)"] : []
         case .unknown(let limit, let searched):
-            return ["  retain cycle search stopped at the \(limit.rawValue) limit (\(searched) objects searched)"]
+            return verbose ? ["  retain cycle search stopped at the \(limit.rawValue) limit (\(searched) objects searched)"] : []
         }
     }
 
-    private static func steps(of chain: RetainChain) -> [String] {
-        chain.nodes.indices.map { index in
-            let mark = chain.certainties[index] ? "" : " ?"
+    /// `ProfileVC.viewModel → ProfileViewModel.onChange? → ProfileVC`, `?` after a reference not known to be strong.
+    private static func inline(_ chain: RetainChain) -> String {
+        let steps = chain.nodes.indices.map { index in
             let path = chain.paths[index].steps.isEmpty ? "" : ".\(chain.paths[index])"
-            return "    \(chain.nodes[index].name)\(path) → \(chain.target(of: index).name)\(mark)"
+            return "\(chain.nodes[index].name)\(path)\(chain.certainties[index] ? "" : "?")"
         }
+        return (steps + [chain.end.name]).joined(separator: " → ")
     }
 }
 
@@ -126,20 +147,9 @@ package struct LeakBudgetReport: LeakFinding {
         let addresses = alive.suffix(LeakReport.alsoAliveLimit).map { "0x\(String($0, radix: 16))" }
         let skipped = alive.count > LeakReport.alsoAliveLimit ? "… \(alive.count - LeakReport.alsoAliveLimit) older, " : ""
         return [
-            "[TLeakDetector] LEAK \(typeName): \(alive.count) instances alive, budget is \(budget)",
-            "  kind: budget, \(LeakKind.budget.summary(root: typeName))",
+            "[TLeakDetector] LEAK \(typeName) (budget): \(alive.count) instances alive, budget is \(budget)",
             "  alive (oldest first): \(skipped)\(addresses.joined(separator: ", "))",
         ].joined(separator: "\n")
-    }
-}
-
-private extension LeakKind {
-    func summary(root: String) -> String {
-        switch self {
-        case .screen: "the closed screen itself is still alive"
-        case .outlived: "\(root) is gone, something outside it still holds this object"
-        case .budget: "more instances alive at once than its budget"
-        }
     }
 }
 

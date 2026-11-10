@@ -52,7 +52,7 @@ public enum TLeakDetector {
         let graph = configuration.graph
         reporter = LeakReporter(mode: modeOverride ?? configuration.mode, suppressions: loaded.suppressions,
                                 exportDirectory: graph.isEnabled ? graph.exportDirectory : nil,
-                                ignoredPatterns: checks.ignoredPatterns)
+                                ignoredPatterns: checks.ignoredPatterns, verbose: isVerbose)
         registry = makeRegistry(configuration)
         // Also as early as possible: only what is created from now on is seen.
         if checks.isEnabled { FrameworkHolds.shared.install() }

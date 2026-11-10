@@ -97,13 +97,26 @@ struct LeakReporterTests {
         #expect(recorder.logs.count == 3)
     }
 
-    @Test("Report says what leaked, after which leave event, for how long, and what else is alive")
+    @Test("Report says what leaked and its kind, then what the screen owns that is still alive; its views are left out")
     func content() throws {
+        let views = (0..<12).map { LeakReport.Object(typeName: "UILabel", path: "ProfileVC.view.subviews[\($0)]", address: 0) }
+        let owned = [LeakReport.Object(typeName: "UIView", path: "ProfileVC.view", address: 0),
+                     LeakReport.Object(typeName: "ProfileModel", path: "ProfileVC.model", address: 0)]
+        LeakReporter(mode: .log, effects: recorder.effects).report(report(alsoAlive: views))
+        LeakReporter(mode: .log, effects: recorder.effects).report(report("ProfileModel", kind: .outlived))
+        LeakReporter(mode: .log, effects: recorder.effects).report(report("SettingsVC", alsoAlive: owned))
+        let texts = recorder.logs.map(\.text)
+        #expect(texts[0] == "[TLeakDetector] LEAK ProfileVC (screen)")
+        #expect(texts[1] == "[TLeakDetector] LEAK ProfileModel (outlived)")
+        #expect(texts[2] == "[TLeakDetector] LEAK SettingsVC (screen)\n  also alive: ProfileModel  ProfileVC.model")
+    }
+
+    @Test("Verbose adds the address and the other objects still alive")
+    func verboseContent() throws {
         let others = (0..<12).map { LeakReport.Object(typeName: "UILabel", path: "ProfileVC.view.subviews[\($0)]", address: 0) }
-        LeakReporter(mode: .log, effects: recorder.effects).report(report(alsoAlive: others))
+        LeakReporter(mode: .log, verbose: true, effects: recorder.effects).report(report(alsoAlive: others))
         let text = try #require(recorder.logs.first).text
-        #expect(text.contains("LEAK ProfileVC (0xbeef) still alive 8.0s after pop of ProfileVC"))
-        #expect(text.contains("kind: screen"))
+        #expect(text.contains("  still alive 8.0s after pop, address 0xbeef"))
         #expect(text.contains("also alive (12):"))
         #expect(text.contains("UILabel  ProfileVC.view.subviews[9]"))
         #expect(!text.contains("subviews[10]"))
@@ -154,22 +167,21 @@ struct LeakReporterTests {
         reporter.report(budget)
         reporter.report(report("ProfileVC"))
         #expect(recorder.logs.count == 2)
-        #expect(recorder.logs.first?.text.contains("kind: budget") == true)
+        #expect(recorder.logs.first?.text.contains("LEAK ProfileVC (budget): 2 instances alive") == true)
         #expect(recorder.logs.first?.text.contains("alive (oldest first): 0xa, 0xb") == true)
     }
 
     // MARK: Retain graph
 
-    @Test("The report spells the cycle out step by step; unverified references are marked ?")
+    @Test("The report spells the cycle out on one line; unverified references are marked ?")
     func cycleText() throws {
         LeakReporter(mode: .log, effects: recorder.effects).report(report(search: search(certain: true)))
         LeakReporter(mode: .log, effects: recorder.effects).report(report(search: search(certain: false)))
         LeakReporter(mode: .log, effects: recorder.effects).report(report(search: search(certain: nil)))
         let texts = recorder.logs.map(\.text)
-        #expect(texts[0].contains("  retain cycle (certain):\n    Probe.worker → Worker\n    Worker.delegate → Probe"))
-        #expect(texts[1].contains("  possible retain cycle (references marked ? are not known to be strong):"))
-        #expect(texts[1].contains("    Worker.delegate → Probe ?"))
-        #expect(texts[2].contains("  no retain cycle through it (2 objects searched): something outside the screen holds it,"))
+        #expect(texts[0].contains("\n  retain cycle: Probe.worker → Worker.delegate → Probe\n"))
+        #expect(texts[1].contains("\n  possible retain cycle (? may be weak): Probe.worker → Worker.delegate? → Probe\n"))
+        #expect(texts[2] == "[TLeakDetector] LEAK ProfileVC (screen)")
     }
 
     @Test("The cycle shape is part of the signature; a suppression without one covers every shape")
@@ -191,16 +203,23 @@ struct LeakReporterTests {
         #expect(!shaped.covers(cycle.signature))
     }
 
-    @Test("The searched graph is written as DOT and JSON, and the report says where")
-    func export() throws {
-        let directory = URL(fileURLWithPath: "/tmp/graphs")
-        recorder.now = Date(timeIntervalSince1970: 0)
-        LeakReporter(mode: .log, exportDirectory: directory, effects: recorder.effects).report(report(search: search(certain: true)))
-        let names = recorder.written.keys.map(\.lastPathComponent).sorted()
-        #expect(names.count == 2 && names.allSatisfy { $0.hasSuffix("-ProfileVC.dot") || $0.hasSuffix("-ProfileVC.json") })
+    @Test("By default no file is written: the report line is the chain")
+    func noExport() throws {
+        LeakReporter(mode: .log, exportDirectory: URL(fileURLWithPath: "/tmp/graphs"), effects: recorder.effects)
+            .report(report(search: search(certain: true)))
+        #expect(recorder.written.isEmpty)
+        #expect(try #require(recorder.logs.first).text
+            == "[TLeakDetector] LEAK ProfileVC (screen)\n  retain cycle: Probe.worker → Worker.delegate → Probe\n  fix: declare `Worker.delegate` as `weak var` (and its protocol as `AnyObject`)")
+    }
+
+    @Test("Verbose writes the whole searched graph as DOT and JSON, and the report says where")
+    func verboseExport() throws {
+        LeakReporter(mode: .log, exportDirectory: URL(fileURLWithPath: "/tmp/graphs"), verbose: true, effects: recorder.effects)
+            .report(report(search: search(certain: true)))
+        #expect(Set(recorder.written.keys.map(\.pathExtension)) == ["dot", "json"])
         let dot = try #require(recorder.written.first { $0.key.pathExtension == "dot" }?.value)
         #expect(String(decoding: dot, as: UTF8.self).contains("color=red"))
-        #expect(try #require(recorder.logs.first).text.contains("  graph: /tmp/graphs/"))
+        #expect(try #require(recorder.logs.first).text.contains("\n  graph: /tmp/graphs/"))
     }
 
     @Test("Long reports are logged in pieces of whole lines, the later ones marked as continued")

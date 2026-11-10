@@ -125,23 +125,23 @@ for entry in entries:
             cause = "held by " + holder
         elif re.search(r"^  Task \(.*\) is still running", message, re.MULTILINE):
             cause = "still running"
-        elif "retain cycle (certain)" in message:
+        elif re.search(r"^  retain cycle:", message, re.MULTILINE):
             cause = "cycle"
         elif "possible retain cycle" in message:
             cause = "possible cycle"
         elif "no retain cycle through it" in message:
             cause = "no cycle"
         elif "no retain cycle found through it" in message:
-            cause = "no cycle found, " + (first(r"(\d+) only partly read") or "?") + " partly read"
+            cause = "no cycle found, " + (first(r"(\d+) objects were only partly read") or "?") + " partly read"
         elif "retain cycle search stopped" in message:
             cause = "search stopped at " + (first(r"stopped at the (\w+) limit") or "?")
         else:
             cause = None
         reports.append({
             "type": first(r"LEAK ([\w.]+)"),
-            "root": first(r"after \w+ of ([\w.]+)"),
-            "kind": first(r"kind: (\w+)"),
-            "trigger": first(r"after (\w+) of"),
+            "root": first(r"after \w+ of ([\w.]+)") or first(r"LEAK ([\w.]+)"),
+            "kind": first(r"LEAK [\w.]+ \((\w+)\)"),
+            "trigger": first(r"still alive [\d.]+s after (\w+)"),
             "age": first(r"still alive ([\d.]+)s"),
             "suppressed": "suppressed until" in message,
             "cause": cause,
