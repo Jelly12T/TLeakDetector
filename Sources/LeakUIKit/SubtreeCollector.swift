@@ -6,6 +6,7 @@
 //
 
 #if LEAK_DETECTOR_ENABLED && canImport(UIKit)
+import Combine
 import UIKit
 import LeakCore
 
@@ -19,7 +20,7 @@ struct SubtreeFilter: Sendable {
     var maxDepth = Int.max
 
     static func app(_ configuration: LeakConfiguration) -> SubtreeFilter {
-        SubtreeFilter(viewController: isAppType, property: isAppType,
+        SubtreeFilter(viewController: isAppType, property: { isAppType($0) || isSubscription($0) },
                       exempt: configuration.isExempt,
                       maxDepth: configuration.maxSubtreeDepth ?? .max)
     }
@@ -96,6 +97,22 @@ enum SubtreeCollector {
         }
     }
 }
+
+/// Objects that keep working for their owner until cancelled or removed: once the owner is gone, one still
+/// alive is a subscription that outlived it.
+func isSubscription(_ cls: AnyClass) -> Bool {
+    subscriptionClasses.contains { base in
+        var current: AnyClass? = cls
+        while let candidate = current {
+            if candidate === base { return true }
+            current = class_getSuperclass(candidate)
+        }
+        return false
+    }
+}
+
+private let subscriptionClasses: [AnyClass] = [AnyCancellable.self, NSKeyValueObservation.self, Timer.self]
+    + ["__NSObserver", "CADisplayLink"].compactMap(NSClassFromString)
 
 /// Types in the app's own dynamic frameworks do not count.
 func isAppType(_ cls: AnyClass) -> Bool {

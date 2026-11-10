@@ -271,11 +271,97 @@ struct InstanceBudgetHookTests {
 @MainActor
 private final class LoadRecorder { var loaded: [ObjectIdentifier] = [] }
 
+final class ButtonScreenVC: UIViewController {
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.addSubview(UIButton(type: .system, primaryAction: UIAction(title: "Tap") { _ in self.tap() }))
+    }
+    func tap() {}
+}
+
+final class ClosureScreenVC: UIViewController {
+    var onTap: (() -> Void)?
+    func tap() {}
+}
+
+/// Keeps screens alive from outside, like a timer or a singleton would.
 @MainActor
-private final class Reports { var items: [LeakReport] = [] }
+enum ScreenKeeper { static var screens: [UIViewController] = [] }
 
 @MainActor
-private final class TestScheduler: LeakScheduler {
+@Suite("End to end with the live retain graph")
+struct RetainGraphEndToEndTests {
+    private func registry(_ reports: Reports, _ scheduler: TestScheduler) -> LeakRegistry {
+        LeakRegistry(scheduler: scheduler, attachment: UIKitAttachmentChecker(), configuration: .init(t1: 2, t2: 8),
+                     cycleSearch: TLeakDetector.cycleSearch(LeakGraphOptions(maxDuration: 1), scheduler: scheduler)) {
+            reports.items.append($0)
+        }
+    }
+
+    @Test("A screen kept alive by a closure capturing self: a certain cycle, reported at T1")
+    func closureCycle() throws {
+        let reports = Reports(), scheduler = TestScheduler()
+        let registry = registry(reports, scheduler)
+        let screen = ClosureScreenVC()
+        screen.loadViewIfNeeded()
+        screen.onTap = { screen.tap() }
+        defer { screen.onTap = nil }
+
+        TLeakDetector.expectDeallocation(of: screen, trigger: .pop, in: registry, filter: testFilter)
+        scheduler.advance(by: 2)
+        let report = try #require(reports.items.first)
+        #expect(report.cause?.isCertainCycle == true)
+        // Through a closure context, or with the screen itself as the context: both are compiler choices.
+        let cycle = try #require(report.signature.cycle)
+        #expect(cycle.hasPrefix("ClosureScreenVC.onTap") && cycle.hasSuffix("→ ClosureScreenVC"), "\(cycle)")
+        #expect(cycle.contains("closure #1 in RetainGraphEndToEndTests.closureCycle()"), "\(cycle)")
+    }
+
+    @Test("A button whose action captures the screen: the cycle goes through the view's subviews, which no ivar shows")
+    func buttonActionCycle() throws {
+        let reports = Reports(), scheduler = TestScheduler()
+        let registry = registry(reports, scheduler)
+        let screen = ButtonScreenVC()
+        screen.loadViewIfNeeded()
+        defer { screen.view.subviews.forEach { $0.removeFromSuperview() } }
+
+        TLeakDetector.expectDeallocation(of: screen, trigger: .pop, in: registry, filter: testFilter)
+        scheduler.advance(by: 8)
+        let report = try #require(reports.items.first)
+        guard case .cycle(let cycle) = report.cause else {
+            Issue.record("no cycle: \(String(describing: report.cause))")
+            return
+        }
+        #expect(cycle.description.hasPrefix("ButtonScreenVC._view → UIView.subviews[0] → UIButton"), "\(cycle)")
+    }
+
+    @Test("A screen with a loaded view kept alive from outside: no cycle through it, reported at T2")
+    func heldFromOutside() throws {
+        let reports = Reports(), scheduler = TestScheduler()
+        let registry = registry(reports, scheduler)
+        let screen = ScreenVC()
+        screen.loadViewIfNeeded()
+        screen.view.addSubview(UILabel())
+        ScreenKeeper.screens.append(screen)
+        defer { ScreenKeeper.screens.removeAll() }
+
+        TLeakDetector.expectDeallocation(of: screen, trigger: .dismiss, in: registry, filter: testFilter)
+        scheduler.advance(by: 2)
+        #expect(reports.items.isEmpty)
+        scheduler.advance(by: 6)
+        let report = try #require(reports.items.first)
+        guard case .noCycle = report.cause else {
+            Issue.record("UIKit internals look like a cycle: \(String(describing: report.cause))")
+            return
+        }
+    }
+}
+
+@MainActor
+final class Reports { var items: [LeakReport] = [] }
+
+@MainActor
+final class TestScheduler: LeakScheduler {
     private(set) var now: TimeInterval = 0
     private var pending: [(at: TimeInterval, seq: Int, action: @MainActor @Sendable () -> Void)] = []
     private var seq = 0

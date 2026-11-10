@@ -7,7 +7,18 @@
 
 #if LEAK_DETECTOR_ENABLED
 import Testing
+import LeakGraph
 @testable import LeakCore
+
+/// `Probe.worker → Worker.delegate → Probe`, certain or not; `nil`: no cycle.
+func sampleSearch(certain: Bool?) -> RetainCycleSearch {
+    var graph = RetainGraph()
+    graph.add(RetainGraph.Node(id: 1, kind: .object(type: "Probe", module: "App")))
+    graph.add(RetainGraph.Node(id: 2, kind: .object(type: "Worker", module: "App")))
+    graph.addEdge(from: 1, to: 2, path: "worker")
+    if let certain { graph.addEdge(from: 2, to: 1, path: "delegate", isCertain: certain) }
+    return graph.shortestCycle(through: 1)
+}
 
 @MainActor
 @Suite("LeakRegistry T1/T2")
@@ -265,6 +276,111 @@ struct LeakRegistryTests {
         scheduler.advance(by: 8)
         #expect(Set(reports.map(\.leaked.typeName)) == ["Probe", "OtherProbe"])
         withExtendedLifetime((a, b)) {}
+    }
+}
+
+@MainActor
+@Suite("LeakRegistry with retain graph")
+struct LeakRegistryGraphTests {
+    let scheduler = ManualScheduler()
+    let attachment = FakeAttachment()
+    private let box = ReportBox()
+
+    private func registry(_ search: RetainCycleSearch) -> LeakRegistry {
+        let box = self.box
+        return LeakRegistry(scheduler: scheduler, attachment: attachment, configuration: .init(t1: 2, t2: 8),
+                            cycleSearch: { _, done in done(LeakAnalysis(search)) }) { box.reports.append($0) }
+    }
+
+    private func mark(_ object: AnyObject, in registry: LeakRegistry) {
+        registry.expectDeallocation(of: [(object, "Probe")], root: object,
+                                    context: LeakContext(trigger: .pop, rootTypeName: "Probe"))
+    }
+
+    @Test("A certain cycle at T1 is reported at T1, with the cycle")
+    func certainCycleAtT1() throws {
+        let object = Probe()
+        let registry = registry(sampleSearch(certain: true))
+        mark(object, in: registry)
+        scheduler.advance(by: 2)
+        let report = try #require(box.reports.first)
+        #expect(report.detectedAt - report.markedAt == 2)
+        #expect(report.cause?.isCertainCycle == true)
+        #expect(report.signature.cycle == "Probe.worker → Worker.delegate → Probe")
+        #expect(registry.pendingCount == 0)
+        scheduler.advance(by: 10)
+        #expect(box.reports.count == 1)
+        withExtendedLifetime(object) {}
+    }
+
+    @Test("A possible cycle does not shorten the wait: reported at T2, cause attached", arguments: [false, nil] as [Bool?])
+    func uncertainOrNoneAtT2(certain: Bool?) throws {
+        let object = Probe()
+        let registry = registry(sampleSearch(certain: certain))
+        mark(object, in: registry)
+        scheduler.advance(by: 2)
+        #expect(box.reports.isEmpty)
+        scheduler.advance(by: 6)
+        let report = try #require(box.reports.first)
+        #expect(report.detectedAt - report.markedAt == 8)
+        switch (certain, report.cause) {
+        case (false, .cycle(let cycle)?): #expect(!cycle.isCertain)
+        case (nil, .noCycle(let searched, let partlyRead)?): #expect(searched == 2 && partlyRead == 0)
+        default: Issue.record("unexpected cause \(String(describing: report.cause))")
+        }
+        withExtendedLifetime(object) {}
+    }
+
+    @Test("A search finishing after T1, a slice at a time: the certain cycle is reported when it ends")
+    func searchFinishingLater() throws {
+        let object = Probe()
+        let box = self.box, scheduler = self.scheduler
+        let registry = LeakRegistry(scheduler: scheduler, attachment: attachment, configuration: .init(t1: 2, t2: 8),
+                                    cycleSearch: { _, done in scheduler.schedule(after: 0.5) { done(LeakAnalysis(sampleSearch(certain: true))) } }) {
+            box.reports.append($0)
+        }
+        mark(object, in: registry)
+        scheduler.advance(by: 2)
+        #expect(box.reports.isEmpty)
+        scheduler.advance(by: 0.5)
+        let report = try #require(box.reports.first)
+        #expect(report.detectedAt - report.markedAt == 2.5)
+        #expect(report.cause?.isCertainCycle == true)
+        withExtendedLifetime(object) {}
+    }
+
+    @Test("The screen came back while the search ran: nothing is reported")
+    func cameBackDuringSearch() {
+        let object = Probe()
+        let box = self.box, scheduler = self.scheduler
+        let registry = LeakRegistry(scheduler: scheduler, attachment: attachment, configuration: .init(t1: 2, t2: 8),
+                                    cycleSearch: { _, done in scheduler.schedule(after: 0.5) { done(LeakAnalysis(sampleSearch(certain: true))) } }) {
+            box.reports.append($0)
+        }
+        mark(object, in: registry)
+        scheduler.advance(by: 2)
+        attachment.attached.insert(ObjectIdentifier(object))
+        scheduler.advance(by: 10)
+        #expect(box.reports.isEmpty)
+        #expect(registry.pendingCount == 0)
+        withExtendedLifetime(object) {}
+    }
+
+    @Test("Searched from an object that died before T2: the cause is not attached to another object's report")
+    func causeOfAnotherObject() throws {
+        let model = OtherProbe()
+        let registry = registry(sampleSearch(certain: false))
+        do {
+            let root = Probe()
+            registry.expectDeallocation(of: [(root, "Probe"), (model, "Probe.model")], root: root,
+                                        context: LeakContext(trigger: .pop, rootTypeName: "Probe"))
+            scheduler.advance(by: 2)
+        }
+        scheduler.advance(by: 6)
+        let report = try #require(box.reports.first)
+        #expect(report.leaked.path == "Probe.model")
+        #expect(report.cause == nil)
+        withExtendedLifetime(model) {}
     }
 }
 

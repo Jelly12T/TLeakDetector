@@ -1,6 +1,8 @@
 # ADR 002: Đọc ownership (strong/weak/unowned) của field Swift từ reflection metadata
 
 - Trạng thái: **Đã chấp nhận. GO**
+- Cập nhật 2026-11-10: cách nhận diện class Swift bằng bit 0/1 ở offset 32 là sai với runtime hiện tại, xem
+  [ADR 004](004-retain-graph.md). Phần đọc field ownership vẫn đúng và đang được dùng trong `LeakHeap`.
 - Ngày: 2026-11-05
 - Spike: [`Spikes/FieldOwnership/`](../../Spikes/FieldOwnership/). Code tham khảo, **không dùng làm code production**.
 

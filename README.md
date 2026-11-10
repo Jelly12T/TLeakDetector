@@ -3,17 +3,23 @@
 Tool phát hiện memory leak của UIViewController trên iOS, **chỉ chạy ở Debug**.
 Bản Release vẫn build module nhưng module rỗng, không có symbol nào của tool.
 
-> **Trạng thái: M1 (MVP).** `TLeakDetector.install()` tự mark VC khi rời màn hình (pop, dismiss, remove child, đổi
-> `rootViewController`), mark cả subtree, check T1 (2 giây) / T2 (8 giây) rồi báo leak (xem [Khi có leak](#khi-có-leak)).
+> **Trạng thái: S5–7 (closure, concurrency, bẫy kinh điển).** `TLeakDetector.install()` tự mark VC khi rời màn hình
+> (pop, dismiss, remove child, đổi `rootViewController`), mark cả subtree, check T1 (2 giây) / T2 (8 giây) rồi báo leak
+> (xem [Khi có leak](#khi-có-leak)). Ở T1, tool tìm retain cycle qua object còn sống, cycle chắc chắn thì báo ngay.
+> Không có cycle thì tool tìm **ai đang giữ** object: Task đang chạy, Timer, observer, CADisplayLink, URLSession.
+> Mỗi report kèm dòng `fix:` gợi ý cách sửa (xem [Retain graph](#retain-graph)). Task còn chạy sau khi màn hình đã chết
+> cũng bị báo. Lúc màn hình đóng, tool cảnh báo sớm các bẫy kinh điển, kể cả khi chưa leak (xem [Cảnh báo](#cảnh-báo)).
 > Instance budget bắt thêm những leak không đi qua sự kiện rời màn hình nào.
-> LeakZoo: 20/20 scenario khớp đáp án, xem [LeakZoo/RESULTS.md](LeakZoo/RESULTS.md).
+> LeakZoo: 27/27 scenario khớp đáp án, xem [LeakZoo/RESULTS.md](LeakZoo/RESULTS.md).
 > Chạy với env `TLEAK_VERBOSE=1` để log mỗi lần mark.
 >
 > Giới hạn hiện tại:
 > - Chỉ VC compile trong app target mới được mark. VC nằm trong dynamic framework bị bỏ qua.
 > - Container tự viết phải gọi `willMove(toParent: nil)` trước `removeFromParent()`, đúng contract của UIKit.
 >   Nếu không, child không bị mark; chỉ [instance budget](#instance-budget) bắt được leak của nó.
-> - Chưa có graph: report chưa cho biết ai đang giữ object, và chưa phân biệt leak do cycle với leak do bị giữ từ root.
+> - Retain graph chưa thấy struct C/C++ của framework, associated object do framework hệ thống set, và biến static
+>   hay singleton giữ object (khi đó report ghi "no cycle"). Xem [ADR 004](docs/adr/004-retain-graph.md).
+> - Task, Timer, observer… chỉ được thấy nếu tạo **sau** `install()`, và từ code của app. Xem [ADR 005](docs/adr/005-closures-concurrency-patterns.md).
 > - VC được cache lại sau khi đóng (giữ để mở lại) phải khai báo `allowedTypes` hoặc conform `LeakOptOut`, nếu không sẽ bị báo leak. Xem [Cấu hình](#cấu-hình).
 
 ## Cài đặt
@@ -71,15 +77,44 @@ Report đi qua `os_log`, subsystem `TLeakDetector`. Trong Console.app lọc bằ
 | `also alive (N):` | Các object khác trong cùng subtree vẫn còn sống (tối đa 10 dòng). Màn hình còn sống thì view của nó còn sống là bình thường |
 | `suppressed until …` | Leak có trong suppression file: chỉ log, không dừng app |
 | `suppression expired on …` | Entry suppression đã hết hạn, leak bị báo lại như mới |
+| `retain cycle (certain):` | Cycle strong reference, mỗi dòng một bước: `A.field → B`. Mọi bước đều chắc chắn là strong, nên report ra ngay ở T1 |
+| `possible retain cycle …` | Cycle có bước đánh dấu `?`: tool không chứng minh được bước đó là strong (thường là block do Swift tạo) |
+| `no retain cycle through it` | Không có cycle: object bị giữ từ bên ngoài màn hình (timer, observer, task, singleton) |
+| `no retain cycle found … partly read` | Không tìm thấy, nhưng có object chỉ đọc được một phần, nên chưa loại trừ được cycle |
+| `retain cycle search stopped at the … limit` | Search chạm giới hạn độ sâu, số object hoặc thời gian trước khi kết luận |
+| `held by a running Task (…):` | Không có cycle: một root bên ngoài màn hình giữ object, kèm chuỗi tham chiếu từ root. Root có thể là Task đang chạy, Timer còn valid, CADisplayLink chưa invalidate, observer chưa remove, hoặc URLSession chưa invalidate |
+| `Task (…) is still running` | Leak là một Task mà màn hình đã khởi chạy: màn hình đã chết, Task vẫn chạy (thường do `for await` trên stream không bao giờ finish) |
+| `fix: …` | Gợi ý cách sửa theo hình dạng nguyên nhân: `[weak self]` trong đúng closure, `weak var delegate`, invalidate timer, cancel task… |
+| `graph: …dot` / `…json` | Graph đã duyệt, cycle tô đỏ. Xem bằng `dot -Tsvg file.dot -o graph.svg` (`brew install graphviz`) |
 
 | `kind` | Nghĩa | Thường sửa ở đâu |
 |---|---|---|
 | `screen` | Chính màn hình vừa đóng vẫn còn sống | Closure bắt `self`, delegate strong, Timer, observer, Task… trong VC đó |
-| `outlived` | Màn hình đã chết nhưng một object nó giữ vẫn sống, tức có thứ bên ngoài đang giữ object đó | Ai đang giữ object (singleton, cache…). Nếu object dùng chung có chủ đích thì thêm vào `allowedTypes` |
+| `outlived` | Màn hình đã chết nhưng một object nó giữ (hoặc một Task nó khởi chạy) vẫn sống | Ai đang giữ object (singleton, cache, NotificationCenter…), hoặc Task chưa được cancel. Nếu object dùng chung có chủ đích thì thêm vào `allowedTypes` |
 | `budget` | Số instance của một type cùng sống vượt budget đã khai báo | Instance cũ không được giải phóng khi mở instance mới |
 
 `kind` mô tả điều tool quan sát được, không mô tả nguyên nhân, và không bao giờ đổi tên ([ADR 003](docs/adr/003-leak-kind.md)).
-Cycle hay rooted sẽ là một trường riêng khi có graph.
+Nguyên nhân (cycle, held by, still running) là các dòng riêng ngay sau `path:`.
+
+### Cảnh báo
+
+Lúc màn hình đóng, trước khi biết có leak hay không, tool cảnh báo các bẫy kinh điển trong những gì màn hình phải giải
+phóng. Cảnh báo chỉ được log (category `warning`), mỗi chỗ một lần, và không bao giờ dừng app.
+
+```
+[TLeakDetector] WARNING strongDelegate: Z26Parser.delegate holds Z26Logger strongly
+  seen when Z26StrongDelegateNoLeakViewController closed (pop): it leaks unless something releases it later
+  fix: declare `Z26Parser.delegate` as `weak var` (and its protocol as `AnyObject`)
+```
+
+| Pattern | Khi nào |
+|---|---|
+| `strongDelegate` | Property `delegate` hoặc `dataSource` strong trong class của app |
+| `timerTarget` | Timer còn valid có target là màn hình, hoặc block của nó giữ màn hình |
+| `displayLinkTarget` | CADisplayLink chưa invalidate có target là màn hình |
+| `urlSessionDelegate` | URLSession chưa invalidate có delegate là màn hình (session giữ delegate tới khi invalidate) |
+| `scriptMessageHandler` | `WKUserContentController` còn giữ màn hình làm script message handler |
+| `observerBlock` | Observer của NotificationCenter chưa remove có block giữ màn hình (`[weak self]` thì không cảnh báo) |
 
 Report vượt budget có dạng:
 
@@ -116,6 +151,57 @@ những gì nó giữ cũng không bị mark. Protocol này không tồn tại �
 extension MiniPlayerViewController: LeakOptOut {}
 #endif
 ```
+
+### Retain graph
+
+Ở T1, tool duyệt graph strong reference từ object còn sống, tìm cycle ngắn nhất đi qua nó. Cách tool biết một ref
+là strong:
+
+- **Swift:** field metadata (bỏ `weak`, `unowned`), capture của closure, giá trị trong struct, collection,
+  property wrapper.
+- **Objective-C:** ARC ivar layout, extended layout của block, `NSArray`/`NSDictionary`/`NSSet`, và chỉ những
+  `NSHashTable`/`NSMapTable` giữ strong.
+- **Associated object:** tool hook `objc_setAssociatedObject` trong các image của app ngay khi `install()`.
+- **UIKit:** subview của view.
+- **Closure generic và block do Swift tạo** (ví dụ bên trong Combine, handler của `UIAction`): đọc được capture.
+- **Hệ thống:** Timer → target/block, CADisplayLink → target, observer → block, URLSession → delegate,
+  `WKUserContentController` → handler. Tool hook các hàm tạo ra chúng ngay khi `install()`.
+- **Task:** tool hook `swift_task_create` trong image của app, nên biết Task nào đang chạy và operation của nó bắt gì.
+
+Không có cycle chắc chắn thì tool tìm tiếp từ các Task đang chạy và những thứ hệ thống đang giữ (timer, observer…)
+tới object, để chỉ ra **ai đang giữ** nó.
+
+Chỗ nào không rõ layout thì tool chỉ so địa chỉ với object đã biết và đánh dấu `?`. Chi tiết và số đo nằm ở
+[ADR 004](docs/adr/004-retain-graph.md) và [ADR 005](docs/adr/005-closures-concurrency-patterns.md).
+
+```swift
+TLeakDetector.install(LeakConfiguration(graph: LeakGraphOptions(prunedModules: ["Combine"])))
+```
+
+| `LeakGraphOptions` | Mặc định | Ý nghĩa |
+|---|---|---|
+| `isEnabled` | `true` | `false`: không tìm cycle, report chỉ có từ T2 và không ghi nguyên nhân |
+| `maxDepth` | `16` | Cycle dài nhất được tìm |
+| `maxNodes` | `1000` | Số object tối đa mỗi lần search |
+| `maxDuration` | `0.1` | Tổng số giây mỗi lần search, cộng mọi lát |
+| `sliceDuration` | `0.004` | Search chạy trên main thread từng lát, mỗi lát chừng này giây, để không gây hitch |
+| `prunedModules` | `[]` | Module có object được ghé qua nhưng không duyệt tiếp, ví dụ `["UIKitCore"]` |
+| `exportDirectory` | thư mục tạm của app + `TLeakDetector/` | Nơi ghi DOT và JSON của mỗi report. `nil`: không ghi |
+
+Trên simulator, thư mục tạm của app nằm ngay trên ổ của máy Mac: dòng `graph:` trong report là đường dẫn mở được luôn.
+Chạy với `TLEAK_VERBOSE=1` để log số object và thời gian của mỗi lần search. Trong Instruments, mỗi lần search hiện
+thành một interval "retain graph" (os_signpost, category `graph`).
+
+`LeakConfiguration.checks` (`LeakChecks`) điều khiển phần Task, hệ thống và cảnh báo:
+
+| `LeakChecks` | Mặc định | Ý nghĩa |
+|---|---|---|
+| `isEnabled` | `true` | Hook Timer, CADisplayLink, NotificationCenter, URLSession, WKUserContentController lúc `install()`, và cảnh báo lúc màn hình đóng |
+| `ignoredPatterns` | `[]` | Các pattern không cảnh báo, ví dụ `[.strongDelegate]` |
+| `tracksTasks` | `true` | Hook việc tạo Task. Task còn chạy 8 giây sau khi màn hình đóng sẽ bị báo `outlived`, nên tắt đi nếu app có Task chạy dài hợp lệ |
+
+Entry suppression có thể ghi thêm hình dạng cycle để chỉ bỏ qua đúng cycle đó:
+`"signature": { "type": "ProfileVC", "kind": "screen", "cycle": "ProfileVC.viewModel → ProfileViewModel.onChange → ProfileVC" }`.
 
 ### Instance budget
 
@@ -186,14 +272,18 @@ Workspace nằm trong thư mục con để `xcodebuild` ở thư mục gốc v�
 ```
 ├── Package.swift                 package chính, product "TLeakDetector"
 ├── Sources/
-│   ├── LeakCore/                 quyết định có leak hay không, không import UIKit
+│   ├── LeakGraph/                object và strong reference thành graph, tìm cycle ngắn nhất, export DOT/JSON
+│   ├── LeakHeap/                 đọc strong reference của object thật: Swift, ObjC, block, associated object
+│   ├── LeakConcurrency/          Task đang chạy: hook swift_task_create, Task giữ ai, Task sống tiếp
+│   ├── LeakPatterns/             Timer, CADisplayLink, observer, URLSession, WKUserContentController; cảnh báo
+│   ├── LeakCore/                 quyết định có leak hay không, nguyên nhân, gợi ý sửa; không import UIKit
 │   └── LeakUIKit/                hook vào UIViewController, API public TLeakDetector
-├── Tests/                        LeakCoreTests (macOS + simulator), LeakUIKitTests (simulator)
+├── Tests/                        test cho từng target; LeakHeapFixtures là class ObjC thật cho LeakHeapTests
 ├── scripts/
 │   ├── check-release-symbols.sh  kiểm tra tool không lọt vào Release
 │   └── zoo-autorun.sh            chạy LeakZoo trên simulator, chấm theo expected.json
 ├── Examples/HostApp/             app tối giản để script trên archive
-├── LeakZoo/                      app 20 scenario leak / không leak, kèm expected.json và RESULTS.md
+├── LeakZoo/                      app 27 scenario leak / không leak, kèm expected.json và RESULTS.md
 ├── Workspace/                    JellyLeakDetector.xcworkspace để mở mọi thứ trong Xcode
 ├── Spikes/                       thí nghiệm có timebox, không phải code production
 └── docs/adr/                     các quyết định kiến trúc
@@ -201,12 +291,21 @@ Workspace nằm trong thư mục con để `xcodebuild` ở thư mục gốc v�
 
 | Target | Vai trò |
 |---|---|
-| `LeakCore` | Quyết định có leak hay không. Không import UIKit. |
+| `LeakGraph` | Biểu diễn object và strong reference thành graph. BFS tìm cycle ngắn nhất đi qua object bị nghi, có giới hạn độ sâu và số object, bỏ qua (prune) các module được chỉ định. Không biết gì về leak hay UIKit. |
+| `LeakHeap` | Đọc strong reference của object đang sống: field Swift (ADR 002), closure, ivar ObjC, block, collection, associated object. Nguồn cho `LeakGraph`. Không import UIKit. |
+| `LeakConcurrency` | Task đang chạy: hook `swift_task_create` ở image của app, giữ Task và context của operation mà không giữ chúng sống. Cho biết Task nào giữ object, Task nào sống lâu hơn màn hình. |
+| `LeakPatterns` | Những gì hệ thống giữ mà không ivar nào cho thấy (Timer, CADisplayLink, observer, URLSession, WKUserContentController), biết được nhờ hook. Cảnh báo bẫy kinh điển lúc màn hình đóng. |
+| `LeakCore` | Quyết định có leak hay không, nguyên nhân và gợi ý sửa. Không import UIKit. |
 | `LeakUIKit` | Hook vào UIViewController, báo tin cho `LeakCore`. Chứa API public `TLeakDetector`. |
+| `LeakGraphTests` | Test cho `LeakGraph`, chạy trên macOS và simulator. |
+| `LeakHeapTests` | Test cho `LeakHeap` trên object thật, kể cả class ObjC trong `LeakHeapFixtures`. |
 | `LeakCoreTests` | Test cho `LeakCore`. |
+| `LeakConcurrencyTests` | Test cho `LeakConcurrency`, với Task thật. |
+| `LeakPatternsTests` | Test cho `LeakPatterns`, với Timer, observer, URLSession thật. |
 | `LeakUIKitTests` | Test cho `LeakUIKit`, chạy trên iOS Simulator. |
 
-Chiều phụ thuộc chỉ có một hướng: `LeakUIKit → LeakCore`. Các target khác được thêm khi tới sprint cần.
+Chiều phụ thuộc chỉ có một hướng: `LeakUIKit → LeakConcurrency, LeakPatterns → LeakCore, LeakHeap → LeakGraph`.
+`LeakCore` và `LeakHeap` không biết nhau. Các target khác được thêm khi tới sprint cần.
 
 Mọi file source đều bọc trong `#if LEAK_DETECTOR_ENABLED`. Flag này chỉ bật ở configuration debug
 (`.when(configuration: .debug)` trong `Package.swift`). File mới cũng phải bọc như vậy.
@@ -239,15 +338,17 @@ Nếu project có configuration riêng, chạy script với `--configuration <t�
 
 ## LeakZoo: bài kiểm tra cho tool
 
-[LeakZoo/](LeakZoo/) là app UIKit cố ý chứa 20 scenario **đã biết đáp án**. Mỗi sprint dùng nó để chấm tool:
-10 case leak phải được báo, 8 case không leak hoặc được phép sống không được báo, 1 case đã suppress chỉ được log,
-và 1 case chỉ instance budget mới bắt được.
+[LeakZoo/](LeakZoo/) là app UIKit cố ý chứa 27 scenario **đã biết đáp án**. Mỗi sprint dùng nó để chấm tool:
+14 case leak phải được báo, 2 case Task/observer sống tiếp sau màn hình phải được báo, 9 case không leak hoặc được phép
+sống không được báo, 1 case đã suppress chỉ được log, và 1 case chỉ instance budget mới bắt được. Mỗi case còn ghi
+các cảnh báo phải có (và chỉ những cảnh báo đó). RESULTS.md cho thấy nguyên nhân, gợi ý sửa và cảnh báo của từng case.
 
 | Nhóm | Case | Ví dụ |
 |---|---|---|
-| Leak, cycle | Z01–Z06 | closure bắt `self`, delegate strong, `UIAction`, child VC, popToRoot, Combine `sink` |
-| Leak, rooted | Z07–Z10 | Timer không invalidate, observer không remove, Task trên AsyncStream không finish, biến static |
-| Không leak | Z11–Z16 | `[weak self]`, Task bị cancel, Timer được invalidate, `asyncAfter` (deinit trễ khoảng 1 giây), child và popToRoot đúng cách |
+| Leak, cycle | Z01–Z06, Z21, Z24, Z25 | closure bắt `self`, delegate strong, `UIAction`, child VC, popToRoot, Combine `sink`, associated object, URLSession delegate, WKScriptMessageHandler |
+| Leak, rooted | Z07–Z10, Z23 | Timer không invalidate, observer không remove, Task trên AsyncStream không finish, biến static, CADisplayLink |
+| Sống tiếp sau màn hình | Z22, Z27 | Task `[weak self]` chờ mãi trên stream, observer `[weak self]` không remove |
+| Không leak | Z11–Z16, Z26 | `[weak self]`, Task bị cancel, Timer được invalidate, `asyncAfter` (deinit trễ khoảng 1 giây), child và popToRoot đúng cách, delegate strong chưa tạo cycle (chỉ cảnh báo) |
 | Được phép, suppress | Z17–Z19 | VC được cache (`allowedTypes`), VC conform `LeakOptOut`, leak có trong `LeakSuppressions.json` (chỉ log) |
 | Chỉ budget bắt được | Z20 | Container quên `willMove(toParent: nil)` nên không có sự kiện rời màn hình; budget 1, autorun mở 2 lần |
 
@@ -312,3 +413,5 @@ scripts/zoo-autorun.sh                         # chấm tool trên LeakZoo (simu
 | [001](docs/adr/001-exclude-from-release.md) | Loại tool khỏi bản Release: flag trong package, `#if DEBUG` trong app, script kiểm tra binary |
 | [002](docs/adr/002-swift-field-ownership.md) | Đọc ownership của field Swift từ reflection metadata, và cách fallback khi app tắt reflection |
 | [003](docs/adr/003-leak-kind.md) | `kind` của leak (`screen`, `outlived`, `budget`) mô tả điều quan sát được và không bao giờ đổi tên |
+| [004](docs/adr/004-retain-graph.md) | Retain graph ở T1: đọc strong reference an toàn, certain/uncertain, báo sớm, ngân sách trên main thread và số đo |
+| [005](docs/adr/005-closures-concurrency-patterns.md) | Spike closure context; closure generic và block Swift; Task (hook `swift_task_create`); hook Timer, observer…; tìm ai đang giữ; cảnh báo và gợi ý sửa |

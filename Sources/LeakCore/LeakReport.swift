@@ -7,6 +7,7 @@
 
 #if LEAK_DETECTOR_ENABLED
 import Foundation
+import LeakGraph
 
 /// What was observed, not why. Raw values are written in suppression files: never rename them (ADR 003).
 package enum LeakKind: String, Sendable, CaseIterable {
@@ -25,8 +26,10 @@ package protocol LeakFinding: Sendable, CustomStringConvertible {
 
 /// Two reports with the same signature are the same leak.
 package struct LeakSignature: Hashable, Sendable {
-    package let typeName: String
-    package let kind: LeakKind
+    package var typeName: String
+    package var kind: LeakKind
+    /// The retain cycle's shape (`RetainChain.description`, no addresses) when one was found.
+    package var cycle: String? = nil
 }
 
 /// What was still alive and detached at T2, for one mark.
@@ -44,8 +47,15 @@ package struct LeakReport: LeakFinding {
     package let context: LeakContext
     package let markedAt: TimeInterval
     package let detectedAt: TimeInterval
+    package var cause: LeakCause? = nil
+    /// What the cause was found from, for the DOT and JSON export.
+    package var analysis: LeakAnalysis? = nil
 
-    package var signature: LeakSignature { LeakSignature(typeName: leaked.typeName, kind: kind) }
+    package var signature: LeakSignature {
+        var signature = LeakSignature(typeName: leaked.typeName, kind: kind)
+        signature.cycle = cause?.chain?.description
+        return signature
+    }
 
     static let alsoAliveLimit = 10
 
@@ -56,6 +66,11 @@ package struct LeakReport: LeakFinding {
             "  kind: \(kind.rawValue), \(kind.summary(root: context.rootTypeName))",
             "  path: \(leaked.path)",
         ]
+        // The cause first: a long list of objects alive must not push it out of a truncated log line.
+        if let cause {
+            lines += Self.describe(cause, age: age, root: context.rootTypeName)
+            lines += LeakFixes.suggestions(for: cause).map { "  fix: \($0)" }
+        }
         if !alsoAlive.isEmpty {
             lines.append("  also alive (\(alsoAlive.count)):")
             lines += alsoAlive.prefix(Self.alsoAliveLimit).map { "    \($0.typeName)  \($0.path)" }
@@ -64,6 +79,37 @@ package struct LeakReport: LeakFinding {
             }
         }
         return lines.joined(separator: "\n")
+    }
+
+    private static func describe(_ cause: LeakCause, age: String, root: String) -> [String] {
+        switch cause {
+        case .cycle(let cycle):
+            let header = cycle.isCertain
+                ? "  retain cycle (certain):"
+                : "  possible retain cycle (references marked ? are not known to be strong):"
+            return [header] + steps(of: cycle)
+        case .heldBy(let holder, let chain):
+            guard !chain.nodes.isEmpty else { return ["  held by \(holder)"] }
+            return ["  held by \(holder):"] + steps(of: chain)
+        case .running(let holder):
+            return ["  \(holder.subject) is still running \(age)s after \(root) closed"]
+        case .noCycle(let searched, 0):
+            return ["  no retain cycle through it (\(searched) objects searched): something outside the screen holds it,",
+                    "  e.g. a timer, an observer, a task or a singleton"]
+        case .noCycle(let searched, let partlyRead):
+            return ["  no retain cycle found through it (\(searched) objects searched, \(partlyRead) only partly read): probably held",
+                    "  from outside the screen, but a cycle through the partly read ones cannot be ruled out"]
+        case .unknown(let limit, let searched):
+            return ["  retain cycle search stopped at the \(limit.rawValue) limit (\(searched) objects searched)"]
+        }
+    }
+
+    private static func steps(of chain: RetainChain) -> [String] {
+        chain.nodes.indices.map { index in
+            let mark = chain.certainties[index] ? "" : " ?"
+            let path = chain.paths[index].steps.isEmpty ? "" : ".\(chain.paths[index])"
+            return "    \(chain.nodes[index].name)\(path) → \(chain.target(of: index).name)\(mark)"
+        }
     }
 }
 

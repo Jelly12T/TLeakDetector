@@ -7,6 +7,7 @@
 
 #if LEAK_DETECTOR_ENABLED
 import Foundation
+import LeakGraph
 
 /// What made us expect the object to die.
 package enum LeakTrigger: String, Sendable {
@@ -29,10 +30,16 @@ package struct LeakContext: Sendable {
     }
 }
 
-/// "This object must die soon." Holds the object weakly only.
+/// "This object must die soon." Holds the object weakly only, or a `LeakProbe` strongly.
 @MainActor
 package final class LeakExpectation {
-    package weak var object: AnyObject?
+    private weak var weakObject: AnyObject?
+    private let probe: LeakProbe?
+    /// `nil` once dead. A probe is itself the object, while it says it is alive.
+    package var object: AnyObject? {
+        guard let probe else { return weakObject }
+        return probe.isAlive ? probe : nil
+    }
     package let objectID: ObjectIdentifier
     /// Captured at mark time: once the object is gone its type can no longer be asked.
     package let typeName: String
@@ -41,9 +48,10 @@ package final class LeakExpectation {
     let markID: UInt64
 
     init(object: AnyObject, path: String, markID: UInt64) {
-        self.object = object
+        probe = object as? LeakProbe
+        weakObject = probe == nil ? object : nil
         self.objectID = ObjectIdentifier(object)
-        self.typeName = String(describing: type(of: object))
+        self.typeName = probe?.typeName ?? String(describing: type(of: object))
         self.path = path
         self.markID = markID
     }
@@ -60,6 +68,8 @@ final class LeakMark {
     let markedAt: TimeInterval
     var stage: Stage = .waitingT1
     var members: [LeakExpectation] = []
+    /// The cause found at T1, for the object that heads the report.
+    var analysis: (from: ObjectIdentifier, result: LeakAnalysis)?
 
     init(id: UInt64, root: AnyObject, context: LeakContext, markedAt: TimeInterval) {
         self.id = id

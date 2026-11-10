@@ -7,17 +7,23 @@
 
 #if LEAK_DETECTOR_ENABLED
 import Foundation
+import LeakGraph
 
 /// The heart of the tool: receives "this subtree must die", waits, checks, decides.
 ///
-///     mark ──T1──► all dead?       → done
-///                  root attached?  → cancel
-///                  else            → wait for T2   (MVP has no graph, so T1 is never conclusive)
-///          ──T2──► all dead?       → done
-///                  root attached?  → cancel
-///                  else            → one report with every object still alive
+///     mark ──T1──► all dead?            → done
+///                  root attached?       → cancel
+///                  else                 → wait for T2, and search the retain graph meanwhile:
+///                                         a certain cycle is reported as soon as it is found
+///                                         (it cannot break by itself), after checking again
+///          ──T2──► all dead?            → done
+///                  root attached?       → cancel
+///                  else                 → one report with every object still alive, and the cause from T1
 ///
-/// T1 and T2 are measured from the mark. Holds every object weakly.
+/// T1 and T2 are measured from the mark. Holds every object weakly, probes strongly.
+/// Looks for why an object is still alive and calls back when it knows, possibly later.
+package typealias LeakCycleSearch = @MainActor (AnyObject, @escaping @MainActor (LeakAnalysis) -> Void) -> Void
+
 @MainActor
 package final class LeakRegistry {
     package struct Configuration: Sendable {
@@ -37,6 +43,7 @@ package final class LeakRegistry {
     private let attachment: LeakAttachmentChecking
     private let configuration: Configuration
     private let onLeak: @MainActor (LeakReport) -> Void
+    private let cycleSearch: LeakCycleSearch?
 
     /// The latest expectation of each object: marking an object again moves it to the new mark.
     /// Keyed by address, but always re-checked against the weak reference: an address can be
@@ -49,11 +56,13 @@ package final class LeakRegistry {
         scheduler: LeakScheduler,
         attachment: LeakAttachmentChecking,
         configuration: Configuration = .default,
+        cycleSearch: LeakCycleSearch? = nil,
         onLeak: @escaping @MainActor (LeakReport) -> Void
     ) {
         self.scheduler = scheduler
         self.attachment = attachment
         self.configuration = configuration
+        self.cycleSearch = cycleSearch
         self.onLeak = onLeak
     }
 
@@ -103,9 +112,31 @@ package final class LeakRegistry {
 
     private func check(_ id: UInt64) {
         guard let mark = marks[id] else { return }
+        let alive = aliveMembers(of: mark)
+        guard !alive.isEmpty else {
+            marks[id] = nil
+            return
+        }
+
+        switch mark.stage {
+        case .waitingT1:
+            mark.stage = .waitingT2
+            schedule(id, after: configuration.t2 - configuration.t1)
+            if let cycleSearch {
+                let subject = alive[0].expectation.objectID
+                cycleSearch(alive[0].object) { [weak self] result in
+                    self?.searchFinished(id, from: subject, result)
+                }
+            }
+        case .waitingT2:
+            report(mark, alive: alive)
+        }
+    }
+
+    /// Members still alive and detached. Drops the rest, and everything if the screen came back.
+    private func aliveMembers(of mark: LeakMark) -> [(expectation: LeakExpectation, object: AnyObject)] {
         // The screen came back: everything it holds is legitimately alive.
         let rootIsAttached = mark.root.map { attachment.isAttached($0) } ?? false
-
         var alive: [(expectation: LeakExpectation, object: AnyObject)] = []
         // Members marked again since belong to a newer mark.
         for member in mark.members where expectations[member.objectID] === member {
@@ -116,32 +147,43 @@ package final class LeakRegistry {
             }
         }
         mark.members = alive.map(\.expectation)
+        return alive
+    }
+
+    private func searchFinished(_ id: UInt64, from subject: ObjectIdentifier, _ result: LeakAnalysis) {
+        guard let mark = marks[id], mark.stage == .waitingT2 else { return }
+        mark.analysis = (subject, result)
+        guard result.cause.isCertainCycle else { return }
+        // The search may end a few frames after T1: the screen could have come back meanwhile.
+        let alive = aliveMembers(of: mark)
         guard !alive.isEmpty else {
             marks[id] = nil
             return
         }
+        report(mark, alive: alive)
+    }
 
-        switch mark.stage {
-        case .waitingT1:
-            mark.stage = .waitingT2
-            schedule(id, after: configuration.t2 - configuration.t1)
-        case .waitingT2:
-            marks[id] = nil
-            for member in mark.members { expectations[member.objectID] = nil }
-            let objects = alive.map {
-                LeakReport.Object(typeName: $0.expectation.typeName, path: $0.expectation.path,
-                                  address: UInt(bitPattern: $0.expectation.objectID))
-            }
-            let report = LeakReport(
-                kind: mark.root == nil ? .outlived : .screen,
-                leaked: objects[0],
-                alsoAlive: Array(objects.dropFirst()),
-                context: mark.context,
-                markedAt: mark.markedAt,
-                detectedAt: scheduler.now)
-            // Keep them alive while the debugger is paused on the report.
-            withExtendedLifetime(alive) { onLeak(report) }
+    private func report(_ mark: LeakMark, alive: [(expectation: LeakExpectation, object: AnyObject)]) {
+        marks[mark.id] = nil
+        for member in mark.members { expectations[member.objectID] = nil }
+        let objects = alive.map {
+            LeakReport.Object(typeName: $0.expectation.typeName, path: $0.expectation.path,
+                              address: UInt(bitPattern: $0.expectation.objectID))
         }
+        var report = LeakReport(
+            kind: mark.root == nil ? .outlived : .screen,
+            leaked: objects[0],
+            alsoAlive: Array(objects.dropFirst()),
+            context: mark.context,
+            markedAt: mark.markedAt,
+            detectedAt: scheduler.now)
+        // A search from an object that has died since says nothing about the one reported now.
+        if let analysis = mark.analysis, analysis.from == alive[0].expectation.objectID {
+            report.cause = analysis.result.cause
+            report.analysis = analysis.result
+        }
+        // Keep them alive while the debugger is paused on the report.
+        withExtendedLifetime(alive) { onLeak(report) }
     }
 }
 

@@ -10,6 +10,7 @@ import Foundation
 
 /// A known leak: only logged until `expires`, reported as new afterwards.
 package struct LeakSuppression: Sendable, Equatable {
+    /// Without a cycle shape it covers every cycle, or none, of that type and kind.
     package let signature: LeakSignature
     package let reason: String
     package let owner: String
@@ -17,6 +18,11 @@ package struct LeakSuppression: Sendable, Equatable {
     package let expires: String
     /// Midnight after `expires`.
     package let endsAt: Date
+
+    package func covers(_ other: LeakSignature) -> Bool {
+        signature.typeName == other.typeName && signature.kind == other.kind
+            && (signature.cycle == nil || signature.cycle == other.cycle)
+    }
 }
 
 /// Reads the suppression file. Never fails: a broken entry is skipped and described in `problems`.
@@ -92,8 +98,10 @@ package enum LeakSuppressionFile {
         guard let endsAt = dates.dayAfter(expires) else {
             throw Invalid(message: #""expires" is "\#(expires)", expected a date like 2026-12-31"#)
         }
+        var cycle: String?
+        if signature["cycle"] != nil { cycle = try text("cycle", in: signature) }
         return LeakSuppression(
-            signature: LeakSignature(typeName: type, kind: kind),
+            signature: LeakSignature(typeName: type, kind: kind, cycle: cycle),
             reason: try text("reason", in: entry),
             owner: try text("owner", in: entry),
             expires: expires,

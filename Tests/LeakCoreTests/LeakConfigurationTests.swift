@@ -69,6 +69,17 @@ struct LeakSuppressionFileTests {
         #expect(suppression.endsAt == calendar.date(from: DateComponents(year: 2027, month: 1, day: 1)))
     }
 
+    @Test("A signature may name the cycle shape; it must be a string")
+    func cycleShape() {
+        var shaped = entry("A")
+        shaped["signature"] = ["type": "A", "kind": "screen", "cycle": "A.model → Model.owner → A"]
+        var wrong = entry("B")
+        wrong["signature"] = ["type": "B", "kind": "screen", "cycle": 3]
+        let loaded = parse([shaped, wrong])
+        #expect(loaded.suppressions.map(\.signature.cycle) == ["A.model → Model.owner → A"])
+        #expect(loaded.problems == [#"LeakSuppressions.json: suppressions[1] (B): "cycle" must be a non-empty string, entry ignored"#])
+    }
+
     @Test("Broken entries are skipped one by one with the reason, valid ones are kept")
     func brokenEntries() {
         var noReason = entry("B"); noReason["reason"] = nil
